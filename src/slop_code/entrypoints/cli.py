@@ -29,6 +29,7 @@ utils_app = typer.Typer(
     help="Utilities and other similar commands.",
 )
 commands.repopulate_diffs.register(utils_app, "repopulate-diffs")
+commands.repopulate_diffstats.register(utils_app, "repopulate-diffstats")
 commands.backfill_reports.register(utils_app, "backfill-reports")
 commands.backfill_categories.register(utils_app, "backfill-categories")
 commands.compress_artifacts.register(utils_app, "compress-artifacts")

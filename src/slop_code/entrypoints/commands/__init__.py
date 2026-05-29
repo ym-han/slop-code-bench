@@ -15,6 +15,7 @@ from slop_code.entrypoints.commands import migrate_evaluation_format
 from slop_code.entrypoints.commands import problems
 from slop_code.entrypoints.commands import render_prompts
 from slop_code.entrypoints.commands import repopulate_diffs
+from slop_code.entrypoints.commands import repopulate_diffstats
 from slop_code.entrypoints.commands import run_agent
 from slop_code.entrypoints.commands import static
 from slop_code.entrypoints.commands import sync
