@@ -45,6 +45,12 @@ logger = get_logger(__name__)
 REFACTOR_SUFFIX = "__refactor"
 REFACTOR_IDENTITY_FILENAME = "refactor_identity.json"
 
+# Minimal host vars a refactor script needs just to launch (find interpreters,
+# locate its config/credential dir, write temp files). Everything else from the
+# host is withheld unless explicitly named in env_passthrough — see
+# ScriptRefactorExecutor.execute.
+_BASE_ENV_VARS = ("PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TERM", "LANG")
+
 
 def compute_refactor_identity(spec: RefactorSpec) -> str:
     """Short hash identifying the refactor spec; used to invalidate resume cache on change.
@@ -129,10 +135,16 @@ class ScriptRefactorExecutor:
         artifacts_dir = save_dir / common.AGENT_DIR_NAME
         artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-        env = dict(os.environ)
-        for var in self._spec.env_passthrough:
-            if var in os.environ:
-                env[var] = os.environ[var]
+        # Strict whitelist: the script sees a minimal base plus only the vars the
+        # caller explicitly passed through (e.g. --refactor-env ANTHROPIC_API_KEY).
+        # Nothing else from the host leaks in.
+        env = {
+            var: os.environ[var]
+            for var in (*_BASE_ENV_VARS, *self._spec.env_passthrough)
+            if var in os.environ
+        }
+        # Forward locale vars so tool output/encoding stays sane.
+        env.update({k: v for k, v in os.environ.items() if k.startswith("LC_")})
 
         cmd = [self._spec.command, str(working_dir), str(artifacts_dir)]
         logger.info("Running script refactor", command=self._spec.command, working_dir=str(working_dir))

@@ -1159,8 +1159,9 @@ def run_agent(
         "--refactor-env",
         help=(
             "Environment variable names to pass through to the refactor script "
-            "(script kind only, repeatable). "
-            "E.g. --refactor-env ANTHROPIC_API_KEY --refactor-env CLAUDE_CODE_OAUTH_TOKEN."
+            "(script kind only, repeatable). The script otherwise runs with only a "
+            "minimal base environment (PATH, HOME, ...); host vars NOT listed here are "
+            "withheld. E.g. --refactor-env ANTHROPIC_API_KEY --refactor-env CLAUDE_CODE_OAUTH_TOKEN."
         ),
     ),
     # Config overrides via positional arguments
