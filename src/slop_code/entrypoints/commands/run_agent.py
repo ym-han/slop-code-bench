@@ -25,6 +25,7 @@ from slop_code.entrypoints import evaluation as evaluation_entry
 from slop_code.entrypoints import problem_runner
 from slop_code.entrypoints import utils
 from slop_code.entrypoints.commands import common
+from slop_code.agent_runner.refactor import ScriptRefactorSpec
 from slop_code.entrypoints.config import ResolvedRunConfig
 from slop_code.entrypoints.config import load_run_config
 from slop_code.entrypoints.config import loader as config_loader
@@ -884,6 +885,7 @@ def _create_task_config(
     live_progress: bool,
     image_name: str,
     resume: bool,
+    refactor_spec: ScriptRefactorSpec | None = None,
 ) -> problem_runner.RunTaskConfig:
     """Create task configuration for problem execution.
 
@@ -925,6 +927,7 @@ def _create_task_config(
         image=image_name,
         resume=resume,
         one_shot=run_cfg.one_shot,
+        refactor_spec=refactor_spec,
     )
 
 
@@ -1131,6 +1134,28 @@ def run_agent(
         False,  # noqa: FBT003
         "--dry-run",
         help="Preview what would be done without making changes (use with --resume)",
+    ),
+    # Refactor step (optional)
+    refactor_command: str | None = typer.Option(
+        None,
+        "--refactor-command",
+        help="Path to a refactor script. Called as: script <target_dir> <artifacts_dir>. "
+             "Mutates the workspace in place; exit 0 = success.",
+    ),
+    refactor_on: str = typer.Option(
+        "all_but_last",
+        "--refactor-on",
+        help="Which checkpoints trigger a refactor step: all | all_but_last | last | comma-sep names.",
+    ),
+    refactor_timeout: int = typer.Option(
+        1800,
+        "--refactor-timeout",
+        help="Timeout in seconds for the refactor script.",
+    ),
+    refactor_env: list[str] = typer.Option(
+        [],
+        "--refactor-env",
+        help="Environment variable names to pass through to the refactor script (repeatable).",
     ),
     # Config overrides via positional arguments
     overrides: list[str] | None = typer.Argument(
@@ -1394,6 +1419,15 @@ def run_agent(
     )
 
     # 14. Create task config
+    refactor_spec = None
+    if refactor_command:
+        refactor_spec = ScriptRefactorSpec(
+            command=refactor_command,
+            on=refactor_on,
+            timeout=refactor_timeout,
+            env_passthrough=list(refactor_env),
+        )
+
     task_config = _create_task_config(
         problem_base_path=problem_root,
         run_dir=run_dir,
@@ -1409,6 +1443,7 @@ def run_agent(
         live_progress=live_progress,
         image_name=image_name,
         resume=is_resuming,
+        refactor_spec=refactor_spec,
     )
 
     # 15. Run problems

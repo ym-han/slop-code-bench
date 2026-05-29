@@ -197,4 +197,5 @@ def run_agent_on_problem(
         output_path=output_path,
         progress_queue=progress_queue,
         resume_info=resume_info,
+        refactor_spec=config.refactor_spec,
     )

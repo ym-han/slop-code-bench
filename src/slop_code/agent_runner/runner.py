@@ -18,6 +18,10 @@ from slop_code.agent_runner.agent import Agent
 from slop_code.agent_runner.agent import CheckpointInferenceResult
 from slop_code.agent_runner.models import AgentRunSpec
 from slop_code.agent_runner.models import UsageTracker
+from slop_code.agent_runner.refactor import RefactorError
+from slop_code.agent_runner.refactor import RefactorSpec
+from slop_code.agent_runner.refactor import make_executor
+from slop_code.agent_runner.refactor import should_refactor
 from slop_code.agent_runner.reporting import AgentCheckpointSummary
 from slop_code.agent_runner.reporting import MetricsTracker
 from slop_code.agent_runner.resume import ResumeInfo
@@ -451,6 +455,7 @@ class AgentRunner:
         *,
         replay_path: Path | None = None,
         resume_info: ResumeInfo | None = None,
+        refactor_spec: RefactorSpec | None = None,
     ):
         self.run_spec = run_spec
         self.agent = agent
@@ -458,6 +463,12 @@ class AgentRunner:
         self.progress_queue = progress_queue
         self.replay_path = replay_path
         self.resume_info = resume_info
+        self._refactor_spec = refactor_spec
+        self._refactor_executor = (
+            make_executor(refactor_spec, run_spec.problem.name)
+            if refactor_spec is not None
+            else None
+        )
 
         # State to be populated during execution
         self._session: Session | None = None
@@ -918,6 +929,34 @@ class AgentRunner:
             evaluation_result=evaluation_result,
         )
 
+    def _run_refactor(self, checkpoint_name: str) -> None:
+        """Run the refactor step after a feature checkpoint.
+
+        Snapshots the refactored workspace so the next feature checkpoint
+        measures its diff against the refactored baseline.  Failures are
+        logged and the run continues from whatever state the refactor left.
+        """
+        if self._refactor_executor is None:
+            return
+        save_dir = self.output_path / f"{checkpoint_name}__refactor"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Starting refactor step", after_checkpoint=checkpoint_name, save_dir=str(save_dir))
+        try:
+            diff = self._refactor_executor.execute(self.session, save_dir)
+            diff_path = save_dir / common.DIFF_FILENAME
+            diff_path.write_text(diff.model_dump_json(indent=2))
+            logger.info(
+                "Refactor step finished",
+                after_checkpoint=checkpoint_name,
+                diff=repr(diff),
+            )
+        except RefactorError as e:
+            logger.error(
+                "Refactor step failed — continuing from pre-refactor state",
+                after_checkpoint=checkpoint_name,
+                error=str(e),
+            )
+
     def _run_problem(self) -> list[AgentCheckpointSummary]:
         """Iterate through checkpoints, skipping completed ones if resuming."""
         # Determine checkpoints to skip when resuming
@@ -930,6 +969,13 @@ class AgentRunner:
             problem=self.run_spec.problem.name,
             checkpoints=len(self.run_spec.problem.checkpoints),
             skipping=len(completed_set),
+        )
+
+        _checkpoints = self.run_spec.problem.checkpoints
+        all_checkpoint_names = (
+            list(_checkpoints.keys())
+            if isinstance(_checkpoints, dict)
+            else list(_checkpoints)
         )
 
         results = []
@@ -976,6 +1022,19 @@ class AgentRunner:
             )
             results.append(summary)
             self.metrics_tracker.finish_checkpoint(self.agent.usage)
+
+            # Inject refactor step after qualifying feature checkpoints
+            if (
+                self._refactor_executor is not None
+                and self._refactor_spec is not None
+                and not summary.had_error
+                and should_refactor(
+                    self._refactor_spec.on,
+                    checkpoint.name,
+                    all_checkpoint_names,
+                )
+            ):
+                self._run_refactor(checkpoint.name)
 
             logger.info(
                 "Checkpoint finished",
@@ -1064,6 +1123,7 @@ def run_agent(
     *,
     replay_path: Path | None = None,
     resume_info: ResumeInfo | None = None,
+    refactor_spec: RefactorSpec | None = None,
 ) -> dict[str, Any]:
     """Run an agent through a complete problem specification.
 
@@ -1090,5 +1150,6 @@ def run_agent(
         progress_queue=progress_queue,
         replay_path=replay_path,
         resume_info=resume_info,
+        refactor_spec=refactor_spec,
     )
     return runner.run()
