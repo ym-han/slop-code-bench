@@ -116,6 +116,9 @@ testpaths = [
 norecursedirs = [
     "tests/agent_runner/resources/*/tests",
 ]
+markers = [
+    "integration: marks tests requiring external services (Docker, network); select with -m integration",
+]
 
 [tool.ruff]
 exclude = [".venv",".gitignore", ".dockerignore"]
@@ -165,7 +168,18 @@ ignore=[
 "**/__init__.py" = ["E402"]
 # Ignore `D` rules everywhere except for the `src/` directory.
 "!src/**.py" = ["D"]
-"tests/**.py" = ["S101"]
+"tests/**.py" = [
+    "S101",   # assert statements
+    "N802",   # test method names use uppercase codes (R1, ScenA, CI4, …)
+    "FBT001", # bool params in test helpers
+    "FBT003", # bool positional values in test helper calls
+    "BLE001", # broad except in availability-check helpers
+    "S603",   # subprocess in test cleanup helpers
+    "S607",   # partial executable path in test cleanup helpers
+]
+# Internal helper functions and Typer CLI params with bool are normal Python patterns.
+"src/slop_code/entrypoints/commands/run_agent.py" = ["FBT001"]
+"src/slop_code/entrypoints/cli.py" = ["FBT001", "FBT003"]
 
 
 [tool.pyright]

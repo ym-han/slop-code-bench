@@ -13,6 +13,7 @@ from slop_code.agent_runner.agent import AgentConfigBase
 from slop_code.agent_runner.credentials import API_KEY_STORE
 from slop_code.agent_runner.credentials import CredentialNotFoundError
 from slop_code.agent_runner.credentials import ProviderCredential
+from slop_code.agent_runner.refactor import ScriptRefactorSpec
 from slop_code.agent_runner.registry import build_agent_config
 from slop_code.agent_runner.resume import detect_resume_point
 from slop_code.common import CHECKPOINT_RESULTS_FILENAME
@@ -25,7 +26,6 @@ from slop_code.entrypoints import evaluation as evaluation_entry
 from slop_code.entrypoints import problem_runner
 from slop_code.entrypoints import utils
 from slop_code.entrypoints.commands import common
-from slop_code.agent_runner.refactor import ScriptRefactorSpec
 from slop_code.entrypoints.config import ResolvedRunConfig
 from slop_code.entrypoints.config import load_run_config
 from slop_code.entrypoints.config import loader as config_loader

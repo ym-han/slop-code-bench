@@ -135,7 +135,7 @@ def _run_git_diffstat(from_dir: Path, to_dir: Path) -> DiffstatResult:
         str(to_dir),
     ]
 
-    git_proc = subprocess.run(
+    git_proc = subprocess.run(  # noqa: S603
         git_cmd,
         capture_output=True,
         text=True,
@@ -151,8 +151,8 @@ def _run_git_diffstat(from_dir: Path, to_dir: Path) -> DiffstatResult:
 
     diff_text = git_proc.stdout
 
-    diffstat_proc = subprocess.run(
-        ["diffstat", "-t", "-m"],
+    diffstat_proc = subprocess.run(  # noqa: S603
+        ["diffstat", "-t", "-m"],  # noqa: S607
         input=diff_text,
         capture_output=True,
         text=True,
