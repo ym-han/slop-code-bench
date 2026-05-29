@@ -55,21 +55,14 @@ class DiffstatResult:
 _EMPTY = DiffstatResult(files_changed=0, lines_changed=0, per_file=[])
 
 
-def _parse_nonneg_int(s: str, line: str) -> int:
-    n = int(s)
-    if n < 0:
-        raise ValueError(f"Negative integer '{s}' in diffstat line: {line!r}")
-    return n
-
-
 def _parse_file_stat_line(line: str) -> FileStatEntry:
     # Format: INSERTED,DELETED,MODIFIED,FILENAME (filename may contain commas)
     parts = line.split(",")
     if len(parts) < 4:
         raise ValueError(f"Invalid CSV line: {line!r}")
-    insertions = _parse_nonneg_int(parts[0], line)
-    deletions = _parse_nonneg_int(parts[1], line)
-    modifications = _parse_nonneg_int(parts[2], line)
+    insertions = int(parts[0])
+    deletions = int(parts[1])
+    modifications = int(parts[2])
     filename_raw = ",".join(parts[3:])
     filename = filename_raw.strip('"')
     return FileStatEntry(

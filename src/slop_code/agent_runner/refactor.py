@@ -52,6 +52,17 @@ REFACTOR_IDENTITY_FILENAME = "refactor_identity.json"
 _BASE_ENV_VARS = ("PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TERM", "LANG")
 
 
+def refactor_runs_after(name: str, all_names: list[str], spec: RefactorSpec | None) -> bool:
+    """Whether a refactor step is scheduled after checkpoint ``name``.
+
+    The structural policy: a refactor runs after every checkpoint except the
+    last, and only when a refactor spec is configured. This is *only* the
+    scheduling rule — execution-time guards (e.g. skipping a checkpoint that
+    errored) are the caller's concern and stay at the call site.
+    """
+    return spec is not None and name != all_names[-1]
+
+
 def compute_refactor_identity(spec: RefactorSpec) -> str:
     """Short hash identifying the refactor spec; used to invalidate resume cache on change.
 
@@ -154,7 +165,7 @@ class ScriptRefactorExecutor:
 
         try:
             with stdout_log.open("w") as out, stderr_log.open("w") as err:
-                proc = subprocess.run(
+                proc = subprocess.run(  # noqa: S603  # command comes from trusted run config
                     cmd,
                     env=env,
                     timeout=self._spec.timeout,
@@ -213,12 +224,15 @@ class AgentRefactorExecutor:
             logger.error("Agent refactor inference error", error=str(e), exc_info=True)
             raise RefactorError(f"Agent refactor failed: {e}") from e
         finally:
-            diff = session.finish_checkpoint(snapshot_dir)
             try:
                 agent.cleanup()
-            except Exception:
+            except Exception:  # noqa: BLE001  # best-effort cleanup, never mask the real error
                 logger.warning("Agent refactor cleanup failed", exc_info=True)
 
+        # Snapshot only on success, matching ScriptRefactorExecutor: a failed refactor
+        # must leave the pre-refactor baseline intact rather than re-baselining onto a
+        # half-refactored workspace (which resume would later prefer and consume).
+        diff = session.finish_checkpoint(snapshot_dir)
         logger.info("Agent refactor complete", diff=repr(diff))
         return diff
 

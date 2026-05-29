@@ -19,10 +19,12 @@ from slop_code.agent_runner.agent import CheckpointInferenceResult
 from slop_code.agent_runner.models import AgentRunSpec
 from slop_code.agent_runner.models import UsageTracker
 from slop_code.agent_runner.refactor import REFACTOR_IDENTITY_FILENAME
+from slop_code.agent_runner.refactor import REFACTOR_SUFFIX
 from slop_code.agent_runner.refactor import RefactorError
 from slop_code.agent_runner.refactor import RefactorSpec
 from slop_code.agent_runner.refactor import compute_refactor_identity
 from slop_code.agent_runner.refactor import make_executor
+from slop_code.agent_runner.refactor import refactor_runs_after
 from slop_code.agent_runner.reporting import AgentCheckpointSummary
 from slop_code.agent_runner.reporting import MetricsTracker
 from slop_code.agent_runner.resume import ResumeInfo
@@ -939,11 +941,11 @@ class AgentRunner:
         """
         if self._refactor_executor is None:
             return
-        save_dir = self.output_path / f"{checkpoint_name}__refactor"
+        save_dir = self.output_path / f"{checkpoint_name}{REFACTOR_SUFFIX}"
         save_dir.mkdir(parents=True, exist_ok=True)
 
         # Write identity file before executing so resume can detect spec changes
-        assert self._refactor_spec is not None
+        assert self._refactor_spec is not None  # noqa: S101  # invariant: set whenever executor is
         identity_data = {
             "identity_hash": compute_refactor_identity(self._refactor_spec),
         }
@@ -1035,10 +1037,8 @@ class AgentRunner:
             # Inject refactor step after every checkpoint except the last —
             # ensures at least one feature checkpoint follows the refactor
             # so churn-after-refactor can be measured.
-            if (
-                self._refactor_executor is not None
-                and not summary.had_error
-                and checkpoint.name != all_checkpoint_names[-1]
+            if not summary.had_error and refactor_runs_after(
+                checkpoint.name, all_checkpoint_names, self._refactor_spec
             ):
                 self._run_refactor(checkpoint.name)
 
