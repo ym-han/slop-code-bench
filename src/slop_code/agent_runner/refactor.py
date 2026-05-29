@@ -1,15 +1,26 @@
 """Refactor executor — runs a transformation on the workspace between checkpoints.
 
 Two interchangeable kinds:
-  - ScriptRefactorExecutor: runs an arbitrary host subprocess
-  - AgentRefactorExecutor: drives an SCBench Agent on the same session
 
-Both mutate the workspace in place and then call session.finish_checkpoint so
-the next feature checkpoint measures its diff against the refactored baseline.
+  Script kind (ScriptRefactorExecutor / --refactor-command):
+    Runs an arbitrary host subprocess with no SCBench agent involvement.
+    The script drives whatever tools it likes (claude CLI, codex, custom binary, …)
+    and mutates the workspace in place.  SCBench treats it as a black box.
+    Configured via CLI --refactor-command; no prompt template needed.
+
+  Agent kind (AgentRefactorExecutor / config YAML refactor.kind: agent):
+    Spins up one of SCBench's registered agents (claude_code, codex, …) on the
+    same session, running the refactor.jinja prompt template.  The agent is a
+    full SCBench agent with usage/cost tracking, Docker container lifecycle, etc.
+    Not exposed as a CLI flag; configure via a run config YAML.
+
+Both kinds mutate the workspace in place and then call session.finish_checkpoint
+so the next feature checkpoint measures its diff against the refactored baseline.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 from dataclasses import dataclass
@@ -37,6 +48,20 @@ logger = get_logger(__name__)
 RefactorOnPolicy = str  # "all" | "all_but_last" | "last" | comma-sep names
 
 REFACTOR_SUFFIX = "__refactor"
+REFACTOR_IDENTITY_FILENAME = "refactor_identity.json"
+
+
+def compute_refactor_identity(spec: RefactorSpec) -> str:
+    """Short hash identifying the refactor spec; used to invalidate resume cache on change.
+
+    Script kind: hashes command + on-policy.
+    Agent kind:  hashes agent config type + model name + prompt content + on-policy.
+    """
+    if isinstance(spec, ScriptRefactorSpec):
+        content = f"script:{spec.command}:{spec.on}"
+    else:
+        content = f"agent:{type(spec.agent_config).__name__}:{spec.model_def.name}:{spec.prompt}:{spec.on}"
+    return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
 def should_refactor(
@@ -69,7 +94,11 @@ def should_refactor(
 
 @dataclass
 class ScriptRefactorSpec:
-    """Run an arbitrary host script as the refactor step.
+    """Run an arbitrary host script as the refactor step (script kind).
+
+    The script is a black box — it drives whatever tools it likes (claude CLI,
+    codex, a compiled binary, …) without any SCBench agent infrastructure.
+    No prompt template is involved; the script owns its own prompting logic.
 
     Script contract:
       - Invoked as: command <target_dir> <artifacts_dir>
@@ -86,7 +115,16 @@ class ScriptRefactorSpec:
 
 @dataclass
 class AgentRefactorSpec:
-    """Run an SCBench Agent as the refactor step on the same session."""
+    """Run an SCBench-registered agent as the refactor step (agent kind).
+
+    Spins up a registered SCBench agent (claude_code, codex, …) on the same
+    session, running it with the provided prompt (typically rendered from
+    configs/prompts/refactor.jinja).  The agent has full usage/cost tracking
+    and a Docker container lifecycle managed by SCBench.
+
+    Configure via a run config YAML (refactor.kind: agent); not exposed as CLI
+    flags since it requires agent/model/credential resolution done at load time.
+    """
 
     agent_config: AgentConfigBase
     model_def: ModelDefinition

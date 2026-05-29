@@ -18,8 +18,10 @@ from slop_code.agent_runner.agent import Agent
 from slop_code.agent_runner.agent import CheckpointInferenceResult
 from slop_code.agent_runner.models import AgentRunSpec
 from slop_code.agent_runner.models import UsageTracker
+from slop_code.agent_runner.refactor import REFACTOR_IDENTITY_FILENAME
 from slop_code.agent_runner.refactor import RefactorError
 from slop_code.agent_runner.refactor import RefactorSpec
+from slop_code.agent_runner.refactor import compute_refactor_identity
 from slop_code.agent_runner.refactor import make_executor
 from slop_code.agent_runner.refactor import should_refactor
 from slop_code.agent_runner.reporting import AgentCheckpointSummary
@@ -940,6 +942,15 @@ class AgentRunner:
             return
         save_dir = self.output_path / f"{checkpoint_name}__refactor"
         save_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write identity file before executing so resume can detect spec changes
+        assert self._refactor_spec is not None
+        identity_data = {
+            "identity_hash": compute_refactor_identity(self._refactor_spec),
+            "on": self._refactor_spec.on,
+        }
+        (save_dir / REFACTOR_IDENTITY_FILENAME).write_text(json.dumps(identity_data, indent=2))
+
         logger.info("Starting refactor step", after_checkpoint=checkpoint_name, save_dir=str(save_dir))
         try:
             diff = self._refactor_executor.execute(self.session, save_dir)

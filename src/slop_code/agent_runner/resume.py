@@ -15,6 +15,11 @@ from pathlib import Path
 import yaml
 
 from slop_code.agent_runner.models import UsageTracker
+from slop_code.agent_runner.refactor import REFACTOR_IDENTITY_FILENAME
+from slop_code.agent_runner.refactor import REFACTOR_SUFFIX
+from slop_code.agent_runner.refactor import RefactorSpec
+from slop_code.agent_runner.refactor import compute_refactor_identity
+from slop_code.agent_runner.refactor import should_refactor as refactor_should_refactor
 from slop_code.agent_runner.reporting import CheckpointState
 from slop_code.common import INFERENCE_RESULT_FILENAME
 from slop_code.common import PROMPT_FILENAME
@@ -40,6 +45,7 @@ class InvalidationReason(Enum):
     MISSING_DIR = "missing_directory"
     UNREADABLE_RESULT = "unreadable_result"
     DEPENDS_ON_INVALID = "depends_on_invalid"
+    REFACTOR_CHANGED = "refactor_changed"
 
 
 @dataclass
@@ -177,6 +183,106 @@ def _check_prompt_mismatch(
     return False
 
 
+def _resolve_last_snapshot_dir(output_path: Path, completed: list[str]) -> Path | None:
+    """Return the snapshot directory to restore from when resuming.
+
+    Prefers the refactor snapshot over the feature checkpoint snapshot when one
+    exists, because the refactor step re-baselines the workspace for the next
+    feature checkpoint.
+    """
+    if not completed:
+        return None
+    last_name = completed[-1]
+    refactor_snapshot = output_path / f"{last_name}{REFACTOR_SUFFIX}" / "snapshot"
+    if refactor_snapshot.exists():
+        return refactor_snapshot
+    return output_path / last_name / "snapshot"
+
+
+def _apply_refactor_consistency(
+    output_path: Path,
+    completed: list[str],
+    statuses: list[CheckpointStatus],
+    checkpoint_names: list[str],
+    refactor_spec: RefactorSpec | None,
+) -> tuple[list[str], list[CheckpointStatus]]:
+    """Invalidate checkpoints whose preceding refactor step identity changed.
+
+    When the refactor spec changes (or is added/removed), any feature checkpoint
+    that ran against the old refactored baseline is stale.  This function detects
+    that and marks the affected checkpoints (and everything after them) invalid.
+
+    Returns updated (completed, statuses).
+    """
+    if not completed:
+        return completed, statuses
+
+    current_hash = compute_refactor_identity(refactor_spec) if refactor_spec else None
+    completed_set = set(completed)
+
+    # Find the first checkpoint whose preceding refactor is inconsistent
+    first_stale_next: str | None = None
+
+    for idx, name in enumerate(checkpoint_names):
+        if name not in completed_set:
+            continue
+
+        refactor_dir = output_path / f"{name}{REFACTOR_SUFFIX}"
+        identity_path = refactor_dir / REFACTOR_IDENTITY_FILENAME
+
+        would_refactor = (
+            refactor_spec is not None
+            and refactor_should_refactor(refactor_spec.on, name, checkpoint_names)
+        )
+        did_refactor = identity_path.exists()
+
+        inconsistent = False
+        if would_refactor != did_refactor:
+            inconsistent = True
+        elif would_refactor and did_refactor:
+            try:
+                stored = json.loads(identity_path.read_text())
+                if stored.get("identity_hash") != current_hash:
+                    inconsistent = True
+            except (OSError, json.JSONDecodeError):
+                inconsistent = True
+
+        if inconsistent and idx + 1 < len(checkpoint_names):
+            next_name = checkpoint_names[idx + 1]
+            if next_name in completed_set:
+                logger.info(
+                    "Refactor spec changed — invalidating subsequent checkpoint",
+                    after_checkpoint=name,
+                    invalidating=next_name,
+                )
+                first_stale_next = next_name
+                break
+
+    if first_stale_next is None:
+        return completed, statuses
+
+    # Rebuild completed and statuses, marking first_stale_next and everything after it invalid
+    stale_from = checkpoint_names.index(first_stale_next)
+    stale_set = set(checkpoint_names[stale_from:])
+
+    new_completed = [n for n in completed if n not in stale_set]
+    new_statuses = []
+    first_stale_seen = False
+    for status in statuses:
+        if status.name in stale_set:
+            reason = (
+                InvalidationReason.REFACTOR_CHANGED
+                if not first_stale_seen
+                else InvalidationReason.DEPENDS_ON_INVALID
+            )
+            new_statuses.append(CheckpointStatus(name=status.name, is_valid=False, reason=reason))
+            first_stale_seen = True
+        else:
+            new_statuses.append(status)
+
+    return new_completed, new_statuses
+
+
 def _detect_resume_from_artifacts(
     output_path: Path,
     checkpoint_names: list[str],
@@ -185,6 +291,7 @@ def _detect_resume_from_artifacts(
     environment: EnvironmentSpec | None = None,
     entry_file: str | None = None,
     checkpoints: list[CheckpointConfig] | None = None,
+    refactor_spec: RefactorSpec | None = None,
 ) -> ResumeInfo | None:
     """Fallback resume detection when run_info.yaml is missing.
 
@@ -311,6 +418,11 @@ def _detect_resume_from_artifacts(
         completed.append(name)
         statuses.append(CheckpointStatus(name=name, is_valid=True))
 
+    # Apply refactor consistency check before building final lists
+    completed, statuses = _apply_refactor_consistency(
+        output_path, completed, statuses, checkpoint_names, refactor_spec
+    )
+
     # Find checkpoint to resume from and build invalidated list
     completed_set = set(completed)
     resume_from = None
@@ -328,7 +440,7 @@ def _detect_resume_from_artifacts(
     if not resume_from:
         # All checkpoints completed - return ResumeInfo with empty resume_from
         prior_usage = _aggregate_prior_usage(output_path, completed)
-        last_snapshot_dir = output_path / completed[-1] / SNAPSHOT_DIR_NAME
+        last_snapshot_dir = _resolve_last_snapshot_dir(output_path, completed)
         return ResumeInfo(
             resume_from_checkpoint="",  # Empty string = nothing to resume
             completed_checkpoints=completed,
@@ -340,9 +452,7 @@ def _detect_resume_from_artifacts(
 
     # Aggregate usage and build ResumeInfo
     prior_usage = _aggregate_prior_usage(output_path, completed)
-    last_snapshot_dir = (
-        output_path / completed[-1] / SNAPSHOT_DIR_NAME if completed else None
-    )
+    last_snapshot_dir = _resolve_last_snapshot_dir(output_path, completed)
 
     logger.info(
         "Detected resume point from artifacts (no run_info.yaml)",
@@ -369,6 +479,7 @@ def detect_resume_point(
     environment: EnvironmentSpec | None = None,
     entry_file: str | None = None,
     checkpoints: list[CheckpointConfig] | None = None,
+    refactor_spec: RefactorSpec | None = None,
 ) -> ResumeInfo | None:
     """Detect where to resume from based on existing output.
 
@@ -401,6 +512,7 @@ def detect_resume_point(
             environment=environment,
             entry_file=entry_file,
             checkpoints=checkpoints,
+            refactor_spec=refactor_spec,
         )
 
     try:
@@ -516,6 +628,11 @@ def detect_resume_point(
                 )
             )
 
+    # Apply refactor consistency check before building final lists
+    completed, statuses = _apply_refactor_consistency(
+        output_path, completed, statuses, checkpoint_names, refactor_spec
+    )
+
     # Build invalidated list from statuses
     invalidated = [s.name for s in statuses if not s.is_valid]
 
@@ -526,7 +643,7 @@ def detect_resume_point(
             completed_count=len(completed),
         )
         prior_usage = _aggregate_prior_usage(output_path, completed)
-        last_snapshot_dir = output_path / completed[-1] / SNAPSHOT_DIR_NAME
+        last_snapshot_dir = _resolve_last_snapshot_dir(output_path, completed)
         return ResumeInfo(
             resume_from_checkpoint="",  # Empty string = nothing to resume
             completed_checkpoints=completed,
@@ -545,11 +662,7 @@ def detect_resume_point(
 
     # Calculate prior usage from completed checkpoints
     prior_usage = _aggregate_prior_usage(output_path, completed)
-
-    # Get the snapshot from the last completed checkpoint (if any)
-    last_snapshot_dir = (
-        output_path / completed[-1] / SNAPSHOT_DIR_NAME if completed else None
-    )
+    last_snapshot_dir = _resolve_last_snapshot_dir(output_path, completed)
 
     logger.info(
         "Detected resume point",
@@ -643,6 +756,7 @@ def format_resume_summary(
         InvalidationReason.MISSING_DIR: "directory missing",
         InvalidationReason.UNREADABLE_RESULT: "unreadable results",
         InvalidationReason.DEPENDS_ON_INVALID: "depends on invalid checkpoint",
+        InvalidationReason.REFACTOR_CHANGED: "refactor spec changed",
     }
 
     lines = []

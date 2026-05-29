@@ -1135,27 +1135,43 @@ def run_agent(
         "--dry-run",
         help="Preview what would be done without making changes (use with --resume)",
     ),
-    # Refactor step (optional)
+    # Refactor step — script kind (black-box host subprocess, no SCBench agent involved)
     refactor_command: str | None = typer.Option(
         None,
         "--refactor-command",
-        help="Path to a refactor script. Called as: script <target_dir> <artifacts_dir>. "
-             "Mutates the workspace in place; exit 0 = success.",
+        help=(
+            "Run a black-box script as the refactor step (script kind). "
+            "Called as: script <target_dir> <artifacts_dir>. "
+            "The script mutates <target_dir> in place using whatever tools it likes "
+            "(e.g. the claude / codex CLI directly); SCBench treats it as opaque. "
+            "Exit 0 = success. "
+            "For running an SCBench-registered agent as the refactorer instead, "
+            "use a run config YAML with a 'refactor.kind: agent' block."
+        ),
     ),
     refactor_on: str = typer.Option(
         "all_but_last",
         "--refactor-on",
-        help="Which checkpoints trigger a refactor step: all | all_but_last | last | comma-sep names.",
+        help=(
+            "Which feature checkpoints trigger a refactor step: "
+            "all | all_but_last | last | comma-separated checkpoint names. "
+            "Default 'all_but_last' ensures at least one feature checkpoint follows "
+            "the refactor so churn-after-refactor can be measured."
+        ),
     ),
     refactor_timeout: int = typer.Option(
         1800,
         "--refactor-timeout",
-        help="Timeout in seconds for the refactor script.",
+        help="Timeout in seconds for the refactor script (script kind only).",
     ),
     refactor_env: list[str] = typer.Option(
         [],
         "--refactor-env",
-        help="Environment variable names to pass through to the refactor script (repeatable).",
+        help=(
+            "Environment variable names to pass through to the refactor script "
+            "(script kind only, repeatable). "
+            "E.g. --refactor-env ANTHROPIC_API_KEY --refactor-env CLAUDE_CODE_OAUTH_TOKEN."
+        ),
     ),
     # Config overrides via positional arguments
     overrides: list[str] | None = typer.Argument(

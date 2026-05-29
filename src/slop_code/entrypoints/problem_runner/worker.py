@@ -132,6 +132,7 @@ def run_agent_on_problem(
             environment=config.env_spec,
             entry_file=problem_config.entry_file,
             checkpoints=checkpoints,
+            refactor_spec=config.refactor_spec,
         )
         if resume_info:
             # Check if all checkpoints are already completed
