@@ -23,7 +23,6 @@ from slop_code.agent_runner.refactor import RefactorError
 from slop_code.agent_runner.refactor import RefactorSpec
 from slop_code.agent_runner.refactor import compute_refactor_identity
 from slop_code.agent_runner.refactor import make_executor
-from slop_code.agent_runner.refactor import should_refactor
 from slop_code.agent_runner.reporting import AgentCheckpointSummary
 from slop_code.agent_runner.reporting import MetricsTracker
 from slop_code.agent_runner.resume import ResumeInfo
@@ -947,7 +946,6 @@ class AgentRunner:
         assert self._refactor_spec is not None
         identity_data = {
             "identity_hash": compute_refactor_identity(self._refactor_spec),
-            "on": self._refactor_spec.on,
         }
         (save_dir / REFACTOR_IDENTITY_FILENAME).write_text(json.dumps(identity_data, indent=2))
 
@@ -1034,16 +1032,13 @@ class AgentRunner:
             results.append(summary)
             self.metrics_tracker.finish_checkpoint(self.agent.usage)
 
-            # Inject refactor step after qualifying feature checkpoints
+            # Inject refactor step after every checkpoint except the last —
+            # ensures at least one feature checkpoint follows the refactor
+            # so churn-after-refactor can be measured.
             if (
                 self._refactor_executor is not None
-                and self._refactor_spec is not None
                 and not summary.had_error
-                and should_refactor(
-                    self._refactor_spec.on,
-                    checkpoint.name,
-                    all_checkpoint_names,
-                )
+                and checkpoint.name != all_checkpoint_names[-1]
             ):
                 self._run_refactor(checkpoint.name)
 

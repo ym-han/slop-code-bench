@@ -1149,16 +1149,6 @@ def run_agent(
             "use a run config YAML with a 'refactor.kind: agent' block."
         ),
     ),
-    refactor_on: str = typer.Option(
-        "all_but_last",
-        "--refactor-on",
-        help=(
-            "Which feature checkpoints trigger a refactor step: "
-            "all | all_but_last | last | comma-separated checkpoint names. "
-            "Default 'all_but_last' ensures at least one feature checkpoint follows "
-            "the refactor so churn-after-refactor can be measured."
-        ),
-    ),
     refactor_timeout: int = typer.Option(
         1800,
         "--refactor-timeout",
@@ -1439,7 +1429,6 @@ def run_agent(
     if refactor_command:
         refactor_spec = ScriptRefactorSpec(
             command=refactor_command,
-            on=refactor_on,
             timeout=refactor_timeout,
             env_passthrough=list(refactor_env),
         )

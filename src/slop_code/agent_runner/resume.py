@@ -19,7 +19,6 @@ from slop_code.agent_runner.refactor import REFACTOR_IDENTITY_FILENAME
 from slop_code.agent_runner.refactor import REFACTOR_SUFFIX
 from slop_code.agent_runner.refactor import RefactorSpec
 from slop_code.agent_runner.refactor import compute_refactor_identity
-from slop_code.agent_runner.refactor import should_refactor as refactor_should_refactor
 from slop_code.agent_runner.reporting import CheckpointState
 from slop_code.common import INFERENCE_RESULT_FILENAME
 from slop_code.common import PROMPT_FILENAME
@@ -230,10 +229,8 @@ def _apply_refactor_consistency(
         refactor_dir = output_path / f"{name}{REFACTOR_SUFFIX}"
         identity_path = refactor_dir / REFACTOR_IDENTITY_FILENAME
 
-        would_refactor = (
-            refactor_spec is not None
-            and refactor_should_refactor(refactor_spec.on, name, checkpoint_names)
-        )
+        # Refactor runs after every checkpoint except the last
+        would_refactor = refactor_spec is not None and name != checkpoint_names[-1]
         did_refactor = identity_path.exists()
 
         inconsistent = False

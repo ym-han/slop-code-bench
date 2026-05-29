@@ -42,11 +42,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Refactor-on policy: which feature checkpoints trigger a refactor step.
-# "all_but_last" is the default — ensures at least one feature checkpoint
-# follows the refactor so we get a "churn after refactor" signal.
-RefactorOnPolicy = str  # "all" | "all_but_last" | "last" | comma-sep names
-
 REFACTOR_SUFFIX = "__refactor"
 REFACTOR_IDENTITY_FILENAME = "refactor_identity.json"
 
@@ -54,37 +49,14 @@ REFACTOR_IDENTITY_FILENAME = "refactor_identity.json"
 def compute_refactor_identity(spec: RefactorSpec) -> str:
     """Short hash identifying the refactor spec; used to invalidate resume cache on change.
 
-    Script kind: hashes command + on-policy.
-    Agent kind:  hashes agent config type + model name + prompt content + on-policy.
+    Script kind: hashes command.
+    Agent kind:  hashes agent config type + model name + prompt content.
     """
     if isinstance(spec, ScriptRefactorSpec):
-        content = f"script:{spec.command}:{spec.on}"
+        content = f"script:{spec.command}"
     else:
-        content = f"agent:{type(spec.agent_config).__name__}:{spec.model_def.name}:{spec.prompt}:{spec.on}"
+        content = f"agent:{type(spec.agent_config).__name__}:{spec.model_def.name}:{spec.prompt}"
     return hashlib.sha256(content.encode()).hexdigest()[:16]
-
-
-def should_refactor(
-    on: RefactorOnPolicy,
-    checkpoint_name: str,
-    all_feature_checkpoint_names: list[str],
-) -> bool:
-    """Return True if a refactor step should follow this checkpoint."""
-    if on == "all":
-        return True
-    if on == "all_but_last":
-        return (
-            not all_feature_checkpoint_names
-            or checkpoint_name != all_feature_checkpoint_names[-1]
-        )
-    if on == "last":
-        return (
-            bool(all_feature_checkpoint_names)
-            and checkpoint_name == all_feature_checkpoint_names[-1]
-        )
-    # Treat as comma-separated list of checkpoint names
-    names = {n.strip() for n in on.split(",")}
-    return checkpoint_name in names
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +80,6 @@ class ScriptRefactorSpec:
     """
 
     command: str
-    on: RefactorOnPolicy = "all_but_last"
     env_passthrough: list[str] = field(default_factory=list)
     timeout: int = 1800  # seconds
 
@@ -131,7 +102,6 @@ class AgentRefactorSpec:
     credential: ProviderCredential
     prompt: str  # rendered prompt string (the refactor instruction)
     image: str
-    on: RefactorOnPolicy = "all_but_last"
     verbose: bool = False
     thinking_preset: ThinkingPreset | None = None
     thinking_max_tokens: int | None = None
