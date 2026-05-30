@@ -6,6 +6,7 @@ import collections.abc
 import json
 import os
 import shlex
+import shutil
 import tempfile
 import typing as tp
 from pathlib import Path
@@ -127,6 +128,18 @@ class ClaudeCodeConfig(AgentConfigBase):
     settings: dict[str, JsonValue] = Field(default_factory=dict)
     max_output_tokens: int | None = None
     base_url: str | None = None
+    claude_home: Path | None = Field(
+        default=None,
+        description=(
+            "Path to a directory whose contents are seeded into this agent "
+            "instance's ~/.claude (e.g. skills/, commands/, agents/). Merged in "
+            "before the harness settings.json, which overlays it. Per-instance, "
+            "so seeded assets are visible only to this agent's container and "
+            "never land in the workspace/snapshot. Primarily used by the "
+            "agent-kind refactor step to give a refactorer skills/commands/"
+            "subagents the feature agent cannot see."
+        ),
+    )
     docker_template: Path = Path(__file__).parent / "docker.j2"
 
     def get_binary(self) -> str:
@@ -174,6 +187,7 @@ class ClaudeCodeAgent(Agent):
         thinking: ThinkingPreset | None,
         max_thinking_tokens: int | None,
         max_output_tokens: int | None,
+        claude_home_template: Path | None = None,
         *,
         bedrock: bool = False,
         foundry: bool = False,
@@ -202,6 +216,7 @@ class ClaudeCodeAgent(Agent):
         self.thinking = thinking
         self.max_thinking_tokens = max_thinking_tokens
         self.max_output_tokens = max_output_tokens
+        self.claude_home_template = claude_home_template
         self._bedrock = bedrock
         self._foundry = foundry
         self._session: Session | None = None
@@ -306,6 +321,7 @@ class ClaudeCodeAgent(Agent):
             thinking=thinking,
             max_thinking_tokens=max_thinking_tokens,
             max_output_tokens=config.max_output_tokens,
+            claude_home_template=config.claude_home,
             bedrock=credential.provider == "bedrock",
             foundry=credential.provider == "foundry",
         )
@@ -371,6 +387,23 @@ class ClaudeCodeAgent(Agent):
 
         claude_home = Path(self._tmp_dir.name) / "claude_home"
         claude_home.mkdir(parents=True, exist_ok=True)
+
+        # Seed this instance's ~/.claude from a template directory (skills/,
+        # commands/, agents/, …) BEFORE writing settings.json, so the harness
+        # settings (auth, thinking) overlay any settings.json the template
+        # carries. claude_home is a fresh per-instance tmp dir bind-mounted only
+        # into this agent's container, so whatever we seed is visible to this
+        # agent alone — never in working_dir, never snapshotted, never in another
+        # run's container. This is what lets the agent-kind refactor step run
+        # skills/commands/subagents the feature agent cannot see, and lets
+        # different runs use different ones in isolation.
+        if self.claude_home_template is not None:
+            template = Path(self.claude_home_template)
+            if not template.is_dir():
+                raise AgentError(
+                    f"claude_home template is not a directory: {template}"
+                )
+            shutil.copytree(template, claude_home, dirs_exist_ok=True)
         claude_home.chmod(0o777)
 
         settings_path = claude_home / "settings.json"

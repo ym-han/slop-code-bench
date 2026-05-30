@@ -13,6 +13,8 @@ from slop_code.agent_runner.agent import AgentConfigBase
 from slop_code.agent_runner.credentials import API_KEY_STORE
 from slop_code.agent_runner.credentials import CredentialNotFoundError
 from slop_code.agent_runner.credentials import ProviderCredential
+from slop_code.agent_runner.refactor import AgentRefactorSpec
+from slop_code.agent_runner.refactor import RefactorSpec
 from slop_code.agent_runner.refactor import ScriptRefactorSpec
 from slop_code.agent_runner.registry import build_agent_config
 from slop_code.agent_runner.resume import detect_resume_point
@@ -398,6 +400,64 @@ def _resolve_environment_and_credentials(
         raise typer.Exit(1) from e
 
     return env_spec_typed, model_def, credential
+
+
+def _build_agent_refactor_spec(
+    run_cfg: ResolvedRunConfig,
+    image_name: str,
+    provider_api_key_env: str | None,
+    verbose: bool,  # noqa: FBT001
+) -> AgentRefactorSpec:
+    """Build an AgentRefactorSpec from the resolved refactor block.
+
+    Reuses the feature run's Docker image (the refactor agent is claude_code and
+    runs the same CLI); skills are seeded into the refactor agent's own
+    per-instance ~/.claude at container-prep time, so image reuse is safe. The
+    refactor agent gets its own container, so its prompt/skill never reach the
+    feature agent.
+    """
+    refactor = run_cfg.refactor
+    if refactor is None:  # caller guards; defensive
+        raise RuntimeError("refactor block is required to build a refactor spec")
+
+    agent_config = build_agent_config(refactor.agent)
+
+    model_def = ModelCatalog.get(refactor.model.name)
+    if model_def is None:
+        typer.echo(
+            typer.style(
+                f"Refactor model '{refactor.model.name}' not found in catalog",
+                fg=typer.colors.RED,
+                bold=True,
+            )
+        )
+        raise typer.Exit(1)
+
+    try:
+        credential = API_KEY_STORE.resolve(
+            refactor.model.provider,
+            env_var_override=provider_api_key_env,
+        )
+    except CredentialNotFoundError as e:
+        typer.echo(
+            typer.style(
+                f"Refactor credential error: {e}",
+                fg=typer.colors.RED,
+                bold=True,
+            )
+        )
+        raise typer.Exit(1) from e
+
+    return AgentRefactorSpec(
+        agent_config=agent_config,
+        model_def=model_def,
+        credential=credential,
+        prompt=refactor.prompt_content,
+        image=image_name,
+        verbose=verbose,
+        thinking_preset=refactor.thinking,
+        thinking_max_tokens=refactor.thinking_max_tokens,
+    )
 
 
 def _build_agent_config(run_cfg: ResolvedRunConfig) -> AgentConfigBase:
@@ -885,7 +945,7 @@ def _create_task_config(
     live_progress: bool,
     image_name: str,
     resume: bool,
-    refactor_spec: ScriptRefactorSpec | None = None,
+    refactor_spec: RefactorSpec | None = None,
 ) -> problem_runner.RunTaskConfig:
     """Create task configuration for problem execution.
 
@@ -1426,12 +1486,29 @@ def run_agent(
     )
 
     # 14. Create task config
-    refactor_spec = None
+    refactor_spec: RefactorSpec | None = None
+    if refactor_command and run_cfg.refactor is not None:
+        typer.echo(
+            typer.style(
+                "Both --refactor-command (script kind) and a config `refactor:` "
+                "block (agent kind) are set; choose one.",
+                fg=typer.colors.RED,
+                bold=True,
+            )
+        )
+        raise typer.Exit(1)
     if refactor_command:
         refactor_spec = ScriptRefactorSpec(
             command=refactor_command,
             timeout=refactor_timeout,
             env_passthrough=list(refactor_env),
+        )
+    elif run_cfg.refactor is not None:
+        refactor_spec = _build_agent_refactor_spec(
+            run_cfg,
+            image_name=image_name,
+            provider_api_key_env=provider_api_key_env,
+            verbose=ctx.obj.debug,
         )
 
     task_config = _create_task_config(

@@ -65,6 +65,34 @@ class ThinkingConfig(BaseModel):
         return self
 
 
+class RefactorConfig(BaseModel):
+    """Agent-kind refactor step configuration (raw, pre-resolution).
+
+    Configures the interleaved refactor step to run one of SCBench's registered
+    agents (currently claude_code) on the workspace after each non-last
+    checkpoint. The *script* kind stays CLI-only (--refactor-command); this block
+    is the only config-reachable path, and it is always agent kind.
+
+    Attributes:
+        agent: Refactor agent config reference (bare name, path, or inline dict).
+        model: Model for the refactorer; defaults to the feature run's model.
+        prompt: Refactor prompt template reference (bare name or path).
+        thinking: Thinking budget for the refactorer (preset or object).
+        claude_home: Path to a directory seeded into the refactorer's
+            per-instance ~/.claude (skills/, commands/, agents/, …). Visible only
+            to the refactor container — never in the workspace/snapshot, never to
+            the feature agent. Use one such dir per arm for isolated A/Bs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    agent: str | dict[str, Any] = "claude_code"
+    model: ModelConfig | None = None
+    prompt: str = "refactor"
+    thinking: ThinkingPresetType | ThinkingConfig = "none"
+    claude_home: str | None = None
+
+
 class RunConfig(BaseModel):
     """Unified run configuration for the agent runner.
 
@@ -112,6 +140,9 @@ class RunConfig(BaseModel):
 
     one_shot: OneShotConfig = Field(default_factory=OneShotConfig)
 
+    # Optional agent-kind refactor step (interleaved between checkpoints).
+    refactor: RefactorConfig | None = None
+
     # Output path configuration with interpolation support
     # Available variables: ${model.name}, ${model.provider}, ${agent.type},
     # ${agent.version}, ${prompt}, ${thinking}, ${env.name}, ${now:FORMAT}
@@ -130,6 +161,34 @@ class RunConfig(BaseModel):
         if isinstance(self.thinking, ThinkingConfig):
             return self.thinking.max_tokens
         return None
+
+
+class ResolvedRefactorConfig(BaseModel):
+    """Fully resolved agent-kind refactor configuration.
+
+    The ~/.claude seed dir is resolved to an absolute path and injected into
+    ``agent`` as ``claude_home`` (so ``build_agent_config(agent)`` yields a
+    config carrying it); it is not duplicated as a separate field.
+
+    Attributes:
+        agent_config_path: Resolved path to refactor agent config (if not inline).
+        agent: Loaded refactor agent config dict (with resolved claude_home path).
+        model: Resolved model for the refactorer.
+        prompt_path: Resolved path to the refactor prompt template.
+        prompt_content: Loaded refactor prompt content.
+        thinking: Resolved thinking preset (or None).
+        thinking_max_tokens: Resolved max thinking tokens (or None).
+    """
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+
+    agent_config_path: Path | None
+    agent: dict[str, Any]
+    model: ModelConfig
+    prompt_path: Path
+    prompt_content: str
+    thinking: ThinkingPresetType | None
+    thinking_max_tokens: int | None
 
 
 class ResolvedRunConfig(BaseModel):
@@ -174,3 +233,4 @@ class ResolvedRunConfig(BaseModel):
     save_template: str
     output_path: str
     one_shot: OneShotConfig = Field(default_factory=OneShotConfig)
+    refactor: ResolvedRefactorConfig | None = None

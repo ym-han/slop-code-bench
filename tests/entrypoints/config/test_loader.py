@@ -259,6 +259,61 @@ agent:
         assert config.agent["type"] == "claude_code"
         assert config.agent["version"] == "2.0.51"
 
+    def test_no_refactor_block_resolves_to_none(self):
+        """Absent refactor block -> resolved refactor is None (no refactor step)."""
+        config = load_run_config()
+        assert config.refactor is None
+
+    def test_agent_refactor_block_resolved(self, tmp_path, monkeypatch):
+        """An agent-kind refactor block resolves agent/model/prompt and injects
+        the ~/.claude seed dir (as an absolute path) into the refactor agent."""
+        monkeypatch.chdir(tmp_path)
+        home_dir = tmp_path / "refactorers" / "arm-A" / ".claude"
+        (home_dir / "skills" / "behavior-preserving").mkdir(parents=True)
+        (home_dir / "skills" / "behavior-preserving" / "SKILL.md").write_text(
+            "refactor without changing behavior"
+        )
+
+        config_file = tmp_path / "run_config.yaml"
+        config_file.write_text(
+            """
+model:
+  provider: anthropic
+  name: sonnet-4.5
+refactor:
+  agent: claude_code
+  prompt: refactor
+  thinking: low
+  claude_home: refactorers/arm-A/.claude
+"""
+        )
+
+        config = load_run_config(config_path=config_file)
+
+        assert config.refactor is not None
+        # Model defaults to the feature run's model when unspecified.
+        assert config.refactor.model.name == "sonnet-4.5"
+        assert config.refactor.thinking == "low"
+        assert config.refactor.prompt_path.stem == "refactor"
+        # Seed dir resolved to an absolute path and injected into the agent config.
+        injected = config.refactor.agent["claude_home"]
+        assert injected == str(home_dir.resolve())
+        assert Path(injected).is_absolute()
+
+    def test_refactor_claude_home_missing_dir_raises(self, tmp_path, monkeypatch):
+        """A claude_home path that isn't a directory is a hard error at load time."""
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "run_config.yaml"
+        config_file.write_text(
+            """
+refactor:
+  agent: claude_code
+  claude_home: refactorers/nope/.claude
+"""
+        )
+        with pytest.raises(FileNotFoundError):
+            load_run_config(config_path=config_file)
+
     def test_thinking_preset_override(self):
         """Test overriding thinking via key=value."""
         config = load_run_config(cli_overrides=["thinking=high"])

@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from slop_code import common
+from slop_code.agent_runner.reporting import save_agent_artifacts
 from slop_code.logging import get_logger
 
 if TYPE_CHECKING:
@@ -49,10 +50,21 @@ REFACTOR_IDENTITY_FILENAME = "refactor_identity.json"
 # locate its config/credential dir, write temp files). Everything else from the
 # host is withheld unless explicitly named in env_passthrough — see
 # ScriptRefactorExecutor.execute.
-_BASE_ENV_VARS = ("PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TERM", "LANG")
+_BASE_ENV_VARS = (
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "TMPDIR",
+    "TERM",
+    "LANG",
+)
 
 
-def refactor_runs_after(name: str, all_names: list[str], spec: RefactorSpec | None) -> bool:
+def refactor_runs_after(
+    name: str, all_names: list[str], spec: RefactorSpec | None
+) -> bool:
     """Whether a refactor step is scheduled after checkpoint ``name``.
 
     The structural policy: a refactor runs after every checkpoint except the
@@ -63,16 +75,36 @@ def refactor_runs_after(name: str, all_names: list[str], spec: RefactorSpec | No
     return spec is not None and name != all_names[-1]
 
 
+def _hash_dir(root: Path | None) -> str:
+    """Stable hash of a directory tree's contents, so swapping a refactorer's
+    seeded ~/.claude (skills/commands/subagents) changes the refactor identity
+    (and invalidates the resume cache)."""
+    if root is None:
+        return ""
+    root = Path(root)
+    h = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        if path.is_file():
+            h.update(path.relative_to(root).as_posix().encode())
+            h.update(path.read_bytes())
+    return h.hexdigest()
+
+
 def compute_refactor_identity(spec: RefactorSpec) -> str:
     """Short hash identifying the refactor spec; used to invalidate resume cache on change.
 
     Script kind: hashes command.
-    Agent kind:  hashes agent config type + model name + prompt content.
+    Agent kind:  hashes agent config type + model name + prompt content + the
+                 seeded ~/.claude template directory's contents.
     """
     if isinstance(spec, ScriptRefactorSpec):
         content = f"script:{spec.command}"
     else:
-        content = f"agent:{type(spec.agent_config).__name__}:{spec.model_def.name}:{spec.prompt}"
+        home_hash = _hash_dir(getattr(spec.agent_config, "claude_home", None))
+        content = (
+            f"agent:{type(spec.agent_config).__name__}:{spec.model_def.name}:"
+            f"{spec.prompt}:{home_hash}"
+        )
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
@@ -137,6 +169,12 @@ class RefactorError(Exception):
 
 
 class ScriptRefactorExecutor:
+    # TODO(scbench): run the script inside a Docker container (via session.spawn / exec)  # noqa: TD003
+    # instead of as a host subprocess, so an arbitrary orchestrator binary and any
+    # coding-agent CLIs it spawns get the same sandbox the feature agents get
+    # (no host filesystem/network access). The insulation invariant is unchanged:
+    # the binary keeps its own ~/.claude outside working_dir, so nothing leaks to
+    # the feature agent. Today this runs on the HOST (subprocess.run below).
     def __init__(self, spec: ScriptRefactorSpec) -> None:
         self._spec = spec
 
@@ -158,7 +196,11 @@ class ScriptRefactorExecutor:
         env.update({k: v for k, v in os.environ.items() if k.startswith("LC_")})
 
         cmd = [self._spec.command, str(working_dir), str(artifacts_dir)]
-        logger.info("Running script refactor", command=self._spec.command, working_dir=str(working_dir))
+        logger.info(
+            "Running script refactor",
+            command=self._spec.command,
+            working_dir=str(working_dir),
+        )
 
         stdout_log = artifacts_dir / "stdout.log"
         stderr_log = artifacts_dir / "stderr.log"
@@ -174,10 +216,18 @@ class ScriptRefactorExecutor:
                     cwd=str(working_dir),
                 )
         except subprocess.TimeoutExpired as e:
-            logger.error("Script refactor timed out", command=self._spec.command)
-            raise RefactorError(f"Refactor script timed out after {self._spec.timeout}s") from e
+            logger.error(
+                "Script refactor timed out", command=self._spec.command
+            )
+            raise RefactorError(
+                f"Refactor script timed out after {self._spec.timeout}s"
+            ) from e
         except Exception as e:
-            logger.error("Script refactor failed to launch", command=self._spec.command, error=str(e))
+            logger.error(
+                "Script refactor failed to launch",
+                command=self._spec.command,
+                error=str(e),
+            )
             raise RefactorError(f"Refactor script failed to launch: {e}") from e
 
         if proc.returncode != 0:
@@ -186,7 +236,9 @@ class ScriptRefactorExecutor:
                 returncode=proc.returncode,
                 stderr_log=str(stderr_log),
             )
-            raise RefactorError(f"Refactor script exited with code {proc.returncode}")
+            raise RefactorError(
+                f"Refactor script exited with code {proc.returncode}"
+            )
 
         snapshot_dir = save_dir / common.SNAPSHOT_DIR_NAME
         diff = session.finish_checkpoint(snapshot_dir)
@@ -221,9 +273,22 @@ class AgentRefactorExecutor:
             logger.info("Running agent refactor", problem=self._problem_name)
             agent.run_checkpoint(spec.prompt)
         except Exception as e:
-            logger.error("Agent refactor inference error", error=str(e), exc_info=True)
+            logger.error(
+                "Agent refactor inference error", error=str(e), exc_info=True
+            )
             raise RefactorError(f"Agent refactor failed: {e}") from e
         finally:
+            # Persist the refactor agent's native artifacts (stdout.jsonl stream,
+            # traces) to save_dir/agent/ — the same trajectory the feature agent
+            # saves per checkpoint. Best-effort and before cleanup so a partial
+            # run is still inspectable; needed both for pilot analysis and so a
+            # caller can verify which skill/subagent the refactor actually fired.
+            try:
+                save_agent_artifacts(save_dir, agent)
+            except Exception:  # noqa: BLE001  # never mask the real refactor error
+                logger.warning(
+                    "Failed to save agent refactor artifacts", exc_info=True
+                )
             try:
                 agent.cleanup()
             except Exception:  # noqa: BLE001  # best-effort cleanup, never mask the real error
@@ -237,7 +302,9 @@ class AgentRefactorExecutor:
         return diff
 
 
-def make_executor(spec: RefactorSpec, problem_name: str) -> ScriptRefactorExecutor | AgentRefactorExecutor:
+def make_executor(
+    spec: RefactorSpec, problem_name: str
+) -> ScriptRefactorExecutor | AgentRefactorExecutor:
     if isinstance(spec, ScriptRefactorSpec):
         return ScriptRefactorExecutor(spec)
     return AgentRefactorExecutor(spec, problem_name)

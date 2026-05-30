@@ -14,6 +14,7 @@ from slop_code.common import CONFIG_FILENAME
 from slop_code.entrypoints.config.resolvers import register_resolvers
 from slop_code.entrypoints.config.run_config import ModelConfig
 from slop_code.entrypoints.config.run_config import OneShotConfig
+from slop_code.entrypoints.config.run_config import ResolvedRefactorConfig
 from slop_code.entrypoints.config.run_config import ResolvedRunConfig
 from slop_code.entrypoints.config.run_config import ThinkingConfig
 from slop_code.entrypoints.config.run_config import ThinkingPresetType
@@ -208,6 +209,57 @@ def _resolve_prompt(prompt_ref: str) -> tuple[Path, str]:
     path = resolve_config_path(prompt_ref, "prompts")
     content = path.read_text(encoding="utf-8")
     return path, content
+
+
+def _resolve_refactor_config(
+    refactor_ref: dict[str, Any] | None,
+    feature_model: ModelConfig,
+) -> ResolvedRefactorConfig | None:
+    """Resolve the agent-kind refactor block to a ResolvedRefactorConfig.
+
+    The ~/.claude seed dir is resolved to an absolute path and injected into the
+    refactor agent dict so build_agent_config picks it up as ``claude_home``.
+    The refactor model defaults to the feature run's model when unspecified.
+    """
+    if not refactor_ref:
+        return None
+
+    agent_path, agent_data = _resolve_agent_config(
+        refactor_ref.get("agent", "claude_code")
+    )
+
+    # Resolve the ~/.claude seed dir to an absolute path; inject into the agent.
+    claude_home_raw = refactor_ref.get("claude_home")
+    if claude_home_raw:
+        home_path = Path(claude_home_raw).expanduser()
+        if not home_path.is_absolute():
+            home_path = (Path.cwd() / home_path).resolve()
+        if not home_path.is_dir():
+            raise FileNotFoundError(
+                f"Refactor claude_home directory not found: {home_path}"
+            )
+        agent_data = {**agent_data, "claude_home": str(home_path)}
+
+    model_ref = refactor_ref.get("model")
+    model = ModelConfig(**model_ref) if model_ref else feature_model
+
+    prompt_path, prompt_content = _resolve_prompt(
+        refactor_ref.get("prompt", "refactor")
+    )
+
+    thinking_preset, thinking_max_tokens = _get_thinking_values(
+        refactor_ref.get("thinking", "none")
+    )
+
+    return ResolvedRefactorConfig(
+        agent_config_path=agent_path,
+        agent=agent_data,
+        model=model,
+        prompt_path=prompt_path,
+        prompt_content=prompt_content,
+        thinking=thinking_preset,
+        thinking_max_tokens=thinking_max_tokens,
+    )
 
 
 def _get_thinking_values(
@@ -504,6 +556,11 @@ def load_run_config(
     except ValidationError as exc:
         raise ValueError(f"Invalid one_shot configuration: {exc}") from exc
 
+    # 12b. Resolve optional agent-kind refactor block
+    refactor_resolved = _resolve_refactor_config(
+        cfg_dict.get("refactor"), model
+    )
+
     # 13. Build interpolation context and resolve output_path
     context = _build_interpolation_context(
         agent_data=agent_data,
@@ -557,6 +614,7 @@ def load_run_config(
         save_template=save_template,
         output_path=output_path,
         one_shot=one_shot,
+        refactor=refactor_resolved,
     )
 
 
@@ -730,6 +788,16 @@ def load_config_from_run_dir(run_dir: Path) -> ResolvedRunConfig:
     # Handle one_shot as dict -> OneShotConfig
     if "one_shot" in config_dict and isinstance(config_dict["one_shot"], dict):
         config_dict["one_shot"] = OneShotConfig(**config_dict["one_shot"])
+
+    # Reconstruct nested refactor block (Path fields -> Path, model -> ModelConfig)
+    refactor_raw = config_dict.get("refactor")
+    if isinstance(refactor_raw, dict):
+        for field in ("agent_config_path", "prompt_path"):
+            if refactor_raw.get(field) is not None:
+                refactor_raw[field] = Path(refactor_raw[field])
+        if isinstance(refactor_raw.get("model"), dict):
+            refactor_raw["model"] = ModelConfig(**refactor_raw["model"])
+        config_dict["refactor"] = ResolvedRefactorConfig(**refactor_raw)
 
     # Backward compatibility: handle old configs with only output_path
     # New configs have save_dir and save_template
