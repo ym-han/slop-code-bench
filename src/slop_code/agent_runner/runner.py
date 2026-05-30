@@ -949,9 +949,15 @@ class AgentRunner:
         identity_data = {
             "identity_hash": compute_refactor_identity(self._refactor_spec),
         }
-        (save_dir / REFACTOR_IDENTITY_FILENAME).write_text(json.dumps(identity_data, indent=2))
+        (save_dir / REFACTOR_IDENTITY_FILENAME).write_text(
+            json.dumps(identity_data, indent=2)
+        )
 
-        logger.info("Starting refactor step", after_checkpoint=checkpoint_name, save_dir=str(save_dir))
+        logger.info(
+            "Starting refactor step",
+            after_checkpoint=checkpoint_name,
+            save_dir=str(save_dir),
+        )
         try:
             diff = self._refactor_executor.execute(self.session, save_dir)
             diff_path = save_dir / common.DIFF_FILENAME

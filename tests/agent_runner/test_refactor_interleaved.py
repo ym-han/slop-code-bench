@@ -146,11 +146,19 @@ class DummyAgent(Agent):
         pass
 
     @classmethod
-    def _from_config(cls, config: AgentConfigBase, problem_name: str, verbose: bool, image: str | None) -> Agent:
+    def _from_config(
+        cls,
+        config: AgentConfigBase,
+        problem_name: str,
+        verbose: bool,
+        image: str | None,
+    ) -> Agent:
         raise NotImplementedError
 
 
-def _make_run_spec(problem: ProblemConfig, local_env: LocalEnvironmentSpec) -> AgentRunSpec:
+def _make_run_spec(
+    problem: ProblemConfig, local_env: LocalEnvironmentSpec
+) -> AgentRunSpec:
     return AgentRunSpec(
         seed=0,
         template="{{task}}",
@@ -170,7 +178,9 @@ def resources_path() -> Path:
 
 @pytest.fixture()
 def problem(resources_path: Path) -> ProblemConfig:
-    return ProblemConfig.from_yaml(resources_path / "inventory_cli_debug_problem")
+    return ProblemConfig.from_yaml(
+        resources_path / "inventory_cli_debug_problem"
+    )
 
 
 @pytest.fixture()
@@ -185,7 +195,9 @@ def local_env() -> LocalEnvironmentSpec:
 
 
 @pytest.fixture()
-def run_spec(problem: ProblemConfig, local_env: LocalEnvironmentSpec) -> AgentRunSpec:
+def run_spec(
+    problem: ProblemConfig, local_env: LocalEnvironmentSpec
+) -> AgentRunSpec:
     return _make_run_spec(problem, local_env)
 
 
@@ -200,7 +212,9 @@ def _make_script(tmp_path: Path, body: str) -> str:
     """Write a shell script and make it executable; return its path as a string."""
     script = tmp_path / "refactor.sh"
     script.write_text("#!/bin/sh\n" + textwrap.dedent(body))
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    script.chmod(
+        script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH
+    )
     return str(script)
 
 
@@ -286,24 +300,36 @@ class TestScheduling:
 
 
 class TestIdentity:
-    def _script(self, command: str = "echo hi", **kwargs: object) -> ScriptRefactorSpec:
+    def _script(
+        self, command: str = "echo hi", **kwargs: object
+    ) -> ScriptRefactorSpec:
         return ScriptRefactorSpec(command=command, **kwargs)  # type: ignore[arg-type]
 
     def test_I1_script_same_command_same_hash(self) -> None:
         """I1: equal commands ⇒ equal hash."""
-        assert compute_refactor_identity(self._script("foo")) == compute_refactor_identity(self._script("foo"))
+        assert compute_refactor_identity(
+            self._script("foo")
+        ) == compute_refactor_identity(self._script("foo"))
 
     def test_I1_script_different_command_different_hash(self) -> None:
         """I1: changing command changes identity."""
-        assert compute_refactor_identity(self._script("foo")) != compute_refactor_identity(self._script("bar"))
+        assert compute_refactor_identity(
+            self._script("foo")
+        ) != compute_refactor_identity(self._script("bar"))
 
     def test_I1_script_timeout_and_env_do_not_affect_identity(self) -> None:
         """I1: timeout and env_passthrough are excluded from identity."""
         base = self._script("cmd")
         modified_timeout = ScriptRefactorSpec(command="cmd", timeout=9999)
-        modified_env = ScriptRefactorSpec(command="cmd", env_passthrough=["FOO"])
-        assert compute_refactor_identity(base) == compute_refactor_identity(modified_timeout)
-        assert compute_refactor_identity(base) == compute_refactor_identity(modified_env)
+        modified_env = ScriptRefactorSpec(
+            command="cmd", env_passthrough=["FOO"]
+        )
+        assert compute_refactor_identity(base) == compute_refactor_identity(
+            modified_timeout
+        )
+        assert compute_refactor_identity(base) == compute_refactor_identity(
+            modified_env
+        )
 
     def test_I3_form_16_hex_chars(self) -> None:
         """I3: identity is 16 lowercase hex chars."""
@@ -339,7 +365,9 @@ class TestIdentity:
 
     def test_I2_agent_same_fields_same_hash(self) -> None:
         """I2: equal (config class, model name, prompt) ⇒ equal hash."""
-        assert compute_refactor_identity(self._agent()) == compute_refactor_identity(self._agent())
+        assert compute_refactor_identity(
+            self._agent()
+        ) == compute_refactor_identity(self._agent())
 
     def test_I2_agent_model_and_prompt_change_identity(self) -> None:
         """I2: changing model name or prompt changes identity."""
@@ -363,7 +391,9 @@ class TestIdentity:
 
     def test_script_and_agent_identities_disjoint(self) -> None:
         """A script and an agent spec never collide (kind prefix differs)."""
-        assert compute_refactor_identity(self._script("x")) != compute_refactor_identity(self._agent())
+        assert compute_refactor_identity(
+            self._script("x")
+        ) != compute_refactor_identity(self._agent())
 
 
 # ===========================================================================
@@ -376,7 +406,9 @@ class TestExecutorSelection:
         from slop_code.agent_runner.refactor import ScriptRefactorExecutor
 
         spec = ScriptRefactorSpec(command="echo")
-        assert isinstance(make_executor(spec, "some_problem"), ScriptRefactorExecutor)
+        assert isinstance(
+            make_executor(spec, "some_problem"), ScriptRefactorExecutor
+        )
 
     def test_M1_agent_spec_produces_agent_executor(self) -> None:
         """M1: an agent spec selects the agent executor (problem name threaded in)."""
@@ -414,7 +446,9 @@ class TestSnapshotResolution:
         result = _resolve_last_snapshot_dir(tmp_path, ["checkpoint_1"])
         assert result == refactor_snap
 
-    def test_RS1_falls_back_to_feature_snapshot_when_no_refactor(self, tmp_path: Path) -> None:
+    def test_RS1_falls_back_to_feature_snapshot_when_no_refactor(
+        self, tmp_path: Path
+    ) -> None:
         """RS1 fallback: no refactor snapshot ⇒ feature snapshot returned."""
         snap = tmp_path / "checkpoint_1" / SNAPSHOT_DIR_NAME
         snap.mkdir(parents=True)
@@ -424,12 +458,18 @@ class TestSnapshotResolution:
     def test_RS1_uses_last_completed(self, tmp_path: Path) -> None:
         """RS1: picks snapshot from the last completed checkpoint, not an earlier one."""
         for i in (1, 2):
-            (tmp_path / f"checkpoint_{i}" / SNAPSHOT_DIR_NAME).mkdir(parents=True)
+            (tmp_path / f"checkpoint_{i}" / SNAPSHOT_DIR_NAME).mkdir(
+                parents=True
+            )
         # Refactor only after checkpoint_1
-        refactor_snap_1 = tmp_path / "checkpoint_1__refactor" / SNAPSHOT_DIR_NAME
+        refactor_snap_1 = (
+            tmp_path / "checkpoint_1__refactor" / SNAPSHOT_DIR_NAME
+        )
         refactor_snap_1.mkdir(parents=True)
         # Last completed is checkpoint_2, which has no refactor snapshot
-        result = _resolve_last_snapshot_dir(tmp_path, ["checkpoint_1", "checkpoint_2"])
+        result = _resolve_last_snapshot_dir(
+            tmp_path, ["checkpoint_1", "checkpoint_2"]
+        )
         assert result == tmp_path / "checkpoint_2" / SNAPSHOT_DIR_NAME
 
 
@@ -438,7 +478,9 @@ class TestSnapshotResolution:
 # ===========================================================================
 
 
-def _write_identity(output_path: Path, checkpoint_name: str, hash_val: str) -> None:
+def _write_identity(
+    output_path: Path, checkpoint_name: str, hash_val: str
+) -> None:
     refactor_dir = output_path / f"{checkpoint_name}{REFACTOR_SUFFIX}"
     refactor_dir.mkdir(parents=True, exist_ok=True)
     (refactor_dir / REFACTOR_IDENTITY_FILENAME).write_text(
@@ -476,7 +518,9 @@ class TestRefactorConsistency:
         assert "c2" not in new_completed
         assert new_completed == ["c1"]
 
-    def test_CI_inconsistent_case1_removed_refactor(self, tmp_path: Path) -> None:
+    def test_CI_inconsistent_case1_removed_refactor(
+        self, tmp_path: Path
+    ) -> None:
         """CI-INCONSISTENT case 1b: refactor removed (would_refactor=False, did_refactor=True)."""
         _write_identity(tmp_path, "c1", "deadbeef12345678")
         completed = ["c1", "c2"]
@@ -489,7 +533,9 @@ class TestRefactorConsistency:
     def test_CI_inconsistent_case2_hash_changed(self, tmp_path: Path) -> None:
         """CI-INCONSISTENT case 2: both have refactor but hash differs."""
         spec = ScriptRefactorSpec(command="new_command")
-        _write_identity(tmp_path, "c1", "0000000000000000")  # different from real hash
+        _write_identity(
+            tmp_path, "c1", "0000000000000000"
+        )  # different from real hash
         completed = ["c1", "c2"]
         statuses = _completed_statuses(completed)
         new_completed, new_statuses = _apply_refactor_consistency(
@@ -497,12 +543,16 @@ class TestRefactorConsistency:
         )
         assert "c2" not in new_completed
 
-    def test_CI_inconsistent_case3_corrupt_identity_file(self, tmp_path: Path) -> None:
+    def test_CI_inconsistent_case3_corrupt_identity_file(
+        self, tmp_path: Path
+    ) -> None:
         """CI-INCONSISTENT case 3: identity file unreadable/unparseable."""
         spec = ScriptRefactorSpec(command="cmd")
         refactor_dir = tmp_path / "c1__refactor"
         refactor_dir.mkdir(parents=True)
-        (refactor_dir / REFACTOR_IDENTITY_FILENAME).write_text("not valid json {{{{")
+        (refactor_dir / REFACTOR_IDENTITY_FILENAME).write_text(
+            "not valid json {{{{"
+        )
         completed = ["c1", "c2"]
         statuses = _completed_statuses(completed)
         new_completed, new_statuses = _apply_refactor_consistency(
@@ -510,7 +560,9 @@ class TestRefactorConsistency:
         )
         assert "c2" not in new_completed
 
-    def test_CI4_cascade_REFACTOR_CHANGED_then_DEPENDS_ON_INVALID(self, tmp_path: Path) -> None:
+    def test_CI4_cascade_REFACTOR_CHANGED_then_DEPENDS_ON_INVALID(
+        self, tmp_path: Path
+    ) -> None:
         """CI4: first stale successor gets REFACTOR_CHANGED; rest get DEPENDS_ON_INVALID."""
         spec = ScriptRefactorSpec(command="new_cmd")
         # c1 ran a refactor with the old command; c2 and c3 completed on that stale baseline
@@ -526,7 +578,9 @@ class TestRefactorConsistency:
         assert status_map["c2"].reason == InvalidationReason.REFACTOR_CHANGED
         assert status_map["c3"].reason == InvalidationReason.DEPENDS_ON_INVALID
 
-    def test_CI6_off_by_one_triggering_checkpoint_stays_completed(self, tmp_path: Path) -> None:
+    def test_CI6_off_by_one_triggering_checkpoint_stays_completed(
+        self, tmp_path: Path
+    ) -> None:
         """CI6: the checkpoint *after* which the refactor ran stays completed; only its successor is stale."""
         spec = ScriptRefactorSpec(command="new_cmd")
         _write_identity(tmp_path, "c1", "0000000000000000")
@@ -538,7 +592,9 @@ class TestRefactorConsistency:
         assert "c1" in new_completed
         assert "c2" not in new_completed
 
-    def test_CI7_last_checkpoint_inconsistency_no_invalidation(self, tmp_path: Path) -> None:
+    def test_CI7_last_checkpoint_inconsistency_no_invalidation(
+        self, tmp_path: Path
+    ) -> None:
         """CI7: inconsistency at the last checkpoint has no successor to invalidate.
 
         Setup: ["c1", "c2", "c3"].  c1 and c3 are completed.  c3 is last.
@@ -565,7 +621,9 @@ class TestRefactorConsistency:
         )
         assert new_completed == completed  # nothing invalidated
 
-    def test_CI8_successor_not_completed_no_invalidation(self, tmp_path: Path) -> None:
+    def test_CI8_successor_not_completed_no_invalidation(
+        self, tmp_path: Path
+    ) -> None:
         """CI8: inconsistency whose successor is not completed ⇒ no cascade."""
         spec = ScriptRefactorSpec(command="new_cmd")
         _write_identity(tmp_path, "c1", "0000000000000000")
@@ -593,14 +651,20 @@ class TestRefactorConsistency:
             prior_usage=UsageTracker(),
             checkpoint_statuses=[
                 CheckpointStatus(name="c1", is_valid=True),
-                CheckpointStatus(name="c2", is_valid=False, reason=InvalidationReason.REFACTOR_CHANGED),
+                CheckpointStatus(
+                    name="c2",
+                    is_valid=False,
+                    reason=InvalidationReason.REFACTOR_CHANGED,
+                ),
             ],
             invalidated_checkpoints=["c2"],
         )
         summary = format_resume_summary(info)
         assert "refactor spec changed" in summary
 
-    def test_RI1_artifact_path_also_checks_consistency(self, tmp_path: Path) -> None:
+    def test_RI1_artifact_path_also_checks_consistency(
+        self, tmp_path: Path
+    ) -> None:
         """RI1: consistency check runs in the artifact-fallback path too.
 
         We fabricate a directory layout that the artifact-fallback will accept
@@ -782,7 +846,9 @@ class TestE2ERefactor:
         # simply because the refactor never ran.
         first_name = names[0]
         refactor_dir = output_dir / f"{first_name}{REFACTOR_SUFFIX}"
-        assert (refactor_dir / SNAPSHOT_DIR_NAME).exists(), "Refactor snapshot missing (D1)"
+        assert (refactor_dir / SNAPSHOT_DIR_NAME).exists(), (
+            "Refactor snapshot missing (D1)"
+        )
         refactor_diff_path = refactor_dir / DIFF_FILENAME
         assert refactor_diff_path.exists(), "Refactor diff.json missing (D1)"
         refactor_diff = json.loads(refactor_diff_path.read_text())
@@ -863,7 +929,12 @@ class TestE2ERefactor:
             Line-based parsing avoids the brittleness of substring-matching the raw
             text (e.g. a value that happens to contain the var name).
             """
-            env_file = out / f"{name}{REFACTOR_SUFFIX}" / common.AGENT_DIR_NAME / "env.txt"
+            env_file = (
+                out
+                / f"{name}{REFACTOR_SUFFIX}"
+                / common.AGENT_DIR_NAME
+                / "env.txt"
+            )
             assert env_file.exists(), "Script did not write env.txt"
             result: dict[str, str] = {}
             for line in env_file.read_text().splitlines():
@@ -897,7 +968,9 @@ class TestE2ERefactor:
             )
 
             # Second: with passthrough — sentinel present with its exact value
-            spec_with_pass = ScriptRefactorSpec(command=script, env_passthrough=[sentinel_var])
+            spec_with_pass = ScriptRefactorSpec(
+                command=script, env_passthrough=[sentinel_var]
+            )
             agent2 = DummyAgent(_dummy_solutions(problem))
             out2 = tmp_path / "out2"
             out2.mkdir()
@@ -931,7 +1004,9 @@ class TestResumeRefactorAware:
             json.dumps({"had_error": False, "usage": {"cost": 0.0}})
         )
 
-    def test_resume_no_refactor_change_no_invalidation(self, tmp_path: Path) -> None:
+    def test_resume_no_refactor_change_no_invalidation(
+        self, tmp_path: Path
+    ) -> None:
         """No spec change ⇒ completed checkpoints remain valid."""
         spec = ScriptRefactorSpec(command="cmd")
         real_hash = compute_refactor_identity(spec)
@@ -939,11 +1014,15 @@ class TestResumeRefactorAware:
         self._write_checkpoint_artifacts(tmp_path, "c2")
         _write_identity(tmp_path, "c1", real_hash)
 
-        result = detect_resume_point(tmp_path, ["c1", "c2", "c3"], refactor_spec=spec)
+        result = detect_resume_point(
+            tmp_path, ["c1", "c2", "c3"], refactor_spec=spec
+        )
         assert result is not None
         assert result.completed_checkpoints == ["c1", "c2"]
 
-    def test_resume_CI4_refactor_changed_invalidates_successor(self, tmp_path: Path) -> None:
+    def test_resume_CI4_refactor_changed_invalidates_successor(
+        self, tmp_path: Path
+    ) -> None:
         """CI4: changed command ⇒ REFACTOR_CHANGED on c2, DEPENDS_ON_INVALID on c3."""
         spec = ScriptRefactorSpec(command="new_command")
         self._write_checkpoint_artifacts(tmp_path, "c1")
@@ -954,7 +1033,9 @@ class TestResumeRefactorAware:
         # c2 also has a refactor (with old hash too) — both should be invalidated
         _write_identity(tmp_path, "c2", "0000000000000000")
 
-        result = detect_resume_point(tmp_path, ["c1", "c2", "c3", "c4"], refactor_spec=spec)
+        result = detect_resume_point(
+            tmp_path, ["c1", "c2", "c3", "c4"], refactor_spec=spec
+        )
         assert result is not None
         # c1 stays valid; c2 is the first stale successor
         assert result.completed_checkpoints == ["c1"]
@@ -980,7 +1061,9 @@ class TestResumeRefactorAware:
         _write_identity(tmp_path, "c1", real_hash)
 
         # c2 is not started at all (no directory)
-        result = detect_resume_point(tmp_path, ["c1", "c2", "c3"], refactor_spec=spec)
+        result = detect_resume_point(
+            tmp_path, ["c1", "c2", "c3"], refactor_spec=spec
+        )
         assert result is not None
         assert result.completed_checkpoints == ["c1"]
         assert result.resume_from_checkpoint == "c2"
@@ -1019,7 +1102,17 @@ def cleanup_as_root(path: Path) -> None:
     if not path.exists():
         return
     subprocess.run(
-        ["docker", "run", "--rm", "-v", f"{path}:/cleanup", "alpine:latest", "rm", "-rf", "/cleanup"],
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{path}:/cleanup",
+            "alpine:latest",
+            "rm",
+            "-rf",
+            "/cleanup",
+        ],
         capture_output=True,
         check=False,
     )
@@ -1050,13 +1143,22 @@ def _make_3chkpt_problem(tmp_path: Path) -> ProblemConfig:
         entry_file="solution",
         checkpoints={
             "checkpoint_1": CheckpointConfig(
-                name="checkpoint_1", version=1, order=1, spec_override="spec for c1"
+                name="checkpoint_1",
+                version=1,
+                order=1,
+                spec_override="spec for c1",
             ),
             "checkpoint_2": CheckpointConfig(
-                name="checkpoint_2", version=1, order=2, spec_override="spec for c2"
+                name="checkpoint_2",
+                version=1,
+                order=2,
+                spec_override="spec for c2",
             ),
             "checkpoint_3": CheckpointConfig(
-                name="checkpoint_3", version=1, order=3, spec_override="spec for c3"
+                name="checkpoint_3",
+                version=1,
+                order=3,
+                spec_override="spec for c3",
             ),
         },
     )
@@ -1343,9 +1445,13 @@ def _snapshot_dir(output_dir: Path, step_dir_name: str) -> Path:
     return output_dir / step_dir_name / SNAPSHOT_DIR_NAME
 
 
-def _snapshot_file_content(output_dir: Path, step_dir_name: str, filename: str) -> str:
+def _snapshot_file_content(
+    output_dir: Path, step_dir_name: str, filename: str
+) -> str:
     p = _snapshot_dir(output_dir, step_dir_name) / filename
-    assert p.exists(), f"Expected {filename!r} in snapshot for {step_dir_name!r}"
+    assert p.exists(), (
+        f"Expected {filename!r} in snapshot for {step_dir_name!r}"
+    )
     return p.read_text()
 
 
@@ -1415,9 +1521,13 @@ class TestDiffVsSnapshot:
         output_dir, _ = self._run_scenario(tmp_path, local_env)
 
         c2_diff = _read_diff(output_dir, "checkpoint_2")
-        assert "c2_extra.txt" in _created_paths(c2_diff), "pre-condition: c2_extra.txt is created"
+        assert "c2_extra.txt" in _created_paths(c2_diff), (
+            "pre-condition: c2_extra.txt is created"
+        )
 
-        content = _snapshot_file_content(output_dir, "checkpoint_2", "c2_extra.txt")
+        content = _snapshot_file_content(
+            output_dir, "checkpoint_2", "c2_extra.txt"
+        )
         assert content == "extra\n", f"snapshot content mismatch: {content!r}"
 
     # ------------------------------------------------------------------
@@ -1432,9 +1542,13 @@ class TestDiffVsSnapshot:
         output_dir, shared_file = self._run_scenario(tmp_path, local_env)
 
         r1_diff = _read_diff(output_dir, "checkpoint_1__refactor")
-        assert shared_file in _modified_paths(r1_diff), "pre-condition: shared.txt is modified in r1"
+        assert shared_file in _modified_paths(r1_diff), (
+            "pre-condition: shared.txt is modified in r1"
+        )
 
-        content = _snapshot_file_content(output_dir, "checkpoint_1__refactor", shared_file)
+        content = _snapshot_file_content(
+            output_dir, "checkpoint_1__refactor", shared_file
+        )
         assert "content_B" in content, (
             f"r1's snapshot should have content B after refactor; got {content!r}"
         )
@@ -1450,7 +1564,9 @@ class TestDiffVsSnapshot:
 
         r1_diff = _read_diff(output_dir, "checkpoint_1__refactor")
         diff_text = _diff_text_for(r1_diff, shared_file)
-        assert diff_text is not None, f"diff_text missing for {shared_file!r} in r1's diff"
+        assert diff_text is not None, (
+            f"diff_text missing for {shared_file!r} in r1's diff"
+        )
         assert "-content_A" in diff_text, (
             f"diff_text should remove content_A (got {diff_text!r})"
         )
@@ -1469,15 +1585,15 @@ class TestDiffVsSnapshot:
         output_dir, shared_file = self._run_scenario(tmp_path, local_env)
 
         c2_diff = _read_diff(output_dir, "checkpoint_2")
-        all_diff_files = {
-            Path(p).name for p in c2_diff.get("file_diffs", {})
-        }
+        all_diff_files = {Path(p).name for p in c2_diff.get("file_diffs", {})}
         assert shared_file not in all_diff_files, (
             f"{shared_file!r} must not appear in c2's diff at all (untouched)"
         )
 
         # Still in the snapshot (carried forward)
-        content = _snapshot_file_content(output_dir, "checkpoint_2", shared_file)
+        content = _snapshot_file_content(
+            output_dir, "checkpoint_2", shared_file
+        )
         assert "content_B" in content, (
             f"c2's snapshot should still have content B for {shared_file!r}; got {content!r}"
         )
@@ -1493,15 +1609,21 @@ class TestDiffVsSnapshot:
         output_dir, shared_file = self._run_scenario(tmp_path, local_env)
 
         # c1_only.txt was created by c1 and never deleted → must survive in c2's snapshot
-        c1_only = _snapshot_file_content(output_dir, "checkpoint_2", "c1_only.txt")
-        assert c1_only == "only in c1\n", f"c1_only.txt content mismatch: {c1_only!r}"
+        c1_only = _snapshot_file_content(
+            output_dir, "checkpoint_2", "c1_only.txt"
+        )
+        assert c1_only == "only in c1\n", (
+            f"c1_only.txt content mismatch: {c1_only!r}"
+        )
 
         # shared.txt was modified by r1 to content B → c2's snapshot still has content B
         shared = _snapshot_file_content(output_dir, "checkpoint_2", shared_file)
         assert "content_B" in shared
 
         # c2's own file is present
-        extra = _snapshot_file_content(output_dir, "checkpoint_2", "c2_extra.txt")
+        extra = _snapshot_file_content(
+            output_dir, "checkpoint_2", "c2_extra.txt"
+        )
         assert extra == "extra\n", f"c2_extra.txt content mismatch: {extra!r}"
 
     # ------------------------------------------------------------------
@@ -1538,19 +1660,27 @@ class TestDiffVsSnapshot:
         try:
             c2_diff = _read_diff(output_dir, "checkpoint_2")
             assert "c2_extra.txt" in _created_paths(c2_diff)
-            content = _snapshot_file_content(output_dir, "checkpoint_2", "c2_extra.txt")
-            assert content == "extra\n", f"snapshot content mismatch: {content!r}"
+            content = _snapshot_file_content(
+                output_dir, "checkpoint_2", "c2_extra.txt"
+            )
+            assert content == "extra\n", (
+                f"snapshot content mismatch: {content!r}"
+            )
         finally:
             cleanup_as_root(output_dir)
 
     @pytest.mark.integration
     @pytest.mark.skipif(not _docker_available(), reason="Docker not available")
-    def test_modified_file_has_new_content_in_snapshot_docker(self, tmp_path: Path) -> None:
+    def test_modified_file_has_new_content_in_snapshot_docker(
+        self, tmp_path: Path
+    ) -> None:
         """Docker: r1's snapshot has content B for shared.txt."""
         docker_env = _load_docker_env()
         output_dir, shared_file = self._run_scenario(tmp_path, docker_env)
         try:
-            content = _snapshot_file_content(output_dir, "checkpoint_1__refactor", shared_file)
+            content = _snapshot_file_content(
+                output_dir, "checkpoint_1__refactor", shared_file
+            )
             assert "content_B" in content
             assert "content_A" not in content
         finally:
@@ -1581,9 +1711,13 @@ class TestDiffVsSnapshot:
         output_dir, shared_file = self._run_scenario(tmp_path, docker_env)
         try:
             c2_diff = _read_diff(output_dir, "checkpoint_2")
-            all_diff_files = {Path(p).name for p in c2_diff.get("file_diffs", {})}
+            all_diff_files = {
+                Path(p).name for p in c2_diff.get("file_diffs", {})
+            }
             assert shared_file not in all_diff_files
-            content = _snapshot_file_content(output_dir, "checkpoint_2", shared_file)
+            content = _snapshot_file_content(
+                output_dir, "checkpoint_2", shared_file
+            )
             assert "content_B" in content
         finally:
             cleanup_as_root(output_dir)
@@ -1597,18 +1731,26 @@ class TestDiffVsSnapshot:
         docker_env = _load_docker_env()
         output_dir, shared_file = self._run_scenario(tmp_path, docker_env)
         try:
-            c1_only = _snapshot_file_content(output_dir, "checkpoint_2", "c1_only.txt")
+            c1_only = _snapshot_file_content(
+                output_dir, "checkpoint_2", "c1_only.txt"
+            )
             assert c1_only == "only in c1\n"
-            shared = _snapshot_file_content(output_dir, "checkpoint_2", shared_file)
+            shared = _snapshot_file_content(
+                output_dir, "checkpoint_2", shared_file
+            )
             assert "content_B" in shared
-            extra = _snapshot_file_content(output_dir, "checkpoint_2", "c2_extra.txt")
+            extra = _snapshot_file_content(
+                output_dir, "checkpoint_2", "c2_extra.txt"
+            )
             assert extra == "extra\n"
         finally:
             cleanup_as_root(output_dir)
 
     @pytest.mark.integration
     @pytest.mark.skipif(not _docker_available(), reason="Docker not available")
-    def test_c1_diff_contains_created_files_docker(self, tmp_path: Path) -> None:
+    def test_c1_diff_contains_created_files_docker(
+        self, tmp_path: Path
+    ) -> None:
         """Docker: shared.txt and c1_only.txt appear as 'created' in checkpoint_1's diff."""
         docker_env = _load_docker_env()
         output_dir, shared_file = self._run_scenario(tmp_path, docker_env)

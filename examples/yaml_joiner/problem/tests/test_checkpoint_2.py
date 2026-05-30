@@ -21,7 +21,8 @@ def load_test_case(case_dir: Path) -> tuple[list[str], dict, list[Path]]:
 
     # Find input files/directories (all .yaml files except result.yaml, and subdirs)
     input_files = [
-        f for f in case_dir.glob("**/*.yaml")
+        f
+        for f in case_dir.glob("**/*.yaml")
         if f.name not in ("result.yaml", "ARGS", "ignore.yaml")
     ]
 
@@ -63,8 +64,9 @@ def test_local_directory_recursion(entrypoint_argv, test_data_dir, tmp_path):
         timeout=10,
     )
 
-    assert result.returncode == 0, \
+    assert result.returncode == 0, (
         f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    )
 
     # Check output file exists
     output_file = tmp_path / "result.yaml"
@@ -76,7 +78,9 @@ def test_local_directory_recursion(entrypoint_argv, test_data_dir, tmp_path):
     assert not diff, f"Output mismatch: {diff}"
 
 
-def test_static_assets_directory(entrypoint_argv, test_data_dir, static_assets, tmp_path):
+def test_static_assets_directory(
+    entrypoint_argv, test_data_dir, static_assets, tmp_path
+):
     """Core: Join YAML files from a static assets directory."""
     case_dir = test_data_dir / "checkpoint_2" / "random" / "static"
     args_raw = shlex.split((case_dir / "ARGS").read_text().strip())
@@ -94,8 +98,9 @@ def test_static_assets_directory(entrypoint_argv, test_data_dir, static_assets, 
         timeout=10,
     )
 
-    assert result.returncode == 0, \
+    assert result.returncode == 0, (
         f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    )
 
     # Check output file exists
     output_file = tmp_path / "result.yaml"

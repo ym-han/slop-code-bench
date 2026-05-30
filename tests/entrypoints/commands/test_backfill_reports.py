@@ -170,11 +170,9 @@ def test_backfill_reports_preserves_costs_for_all_agents(
     monkeypatch.setattr(
         backfill_reports_module,
         "display_and_save_summary",
-        lambda report_file,
-        results_dir,
-        config,
-        console,
-        expected_checkpoints: None,
+        lambda report_file, results_dir, config, console, expected_checkpoints: (
+            None
+        ),
     )
     monkeypatch.setattr(
         backfill_reports_module,

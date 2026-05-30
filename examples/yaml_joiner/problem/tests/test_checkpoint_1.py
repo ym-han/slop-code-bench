@@ -20,8 +20,7 @@ def load_test_case(case_dir: Path) -> tuple[list[str], dict, list[Path]]:
 
     # Find input files (all .yaml files except result.yaml)
     input_files = [
-        f for f in case_dir.glob("**/*.yaml")
-        if f.name != "result.yaml"
+        f for f in case_dir.glob("**/*.yaml") if f.name != "result.yaml"
     ]
 
     return args, expected, input_files
@@ -48,8 +47,9 @@ def test_single_file_join(entrypoint_argv, test_data_dir, tmp_path):
         timeout=10,
     )
 
-    assert result.returncode == 0, \
+    assert result.returncode == 0, (
         f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    )
 
     # Check output file exists
     output_file = tmp_path / "result.yaml"
@@ -82,8 +82,9 @@ def test_multiple_files_join(entrypoint_argv, test_data_dir, tmp_path):
         timeout=10,
     )
 
-    assert result.returncode == 0, \
+    assert result.returncode == 0, (
         f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    )
 
     # Check output file exists
     output_file = tmp_path / "result.yaml"

@@ -466,9 +466,11 @@ def _carry_forward_batch(
         chkpt_pattern = re.compile(r"^checkpoint_(\d+)$")
         sorted_chkpts = sorted(
             checkpoints.keys(),
-            key=lambda x: int(chkpt_pattern.match(x).group(1))
-            if chkpt_pattern.match(x)
-            else 0,
+            key=lambda x: (
+                int(chkpt_pattern.match(x).group(1))
+                if chkpt_pattern.match(x)
+                else 0
+            ),
         )
 
         prev_checkpoint_name: str | None = None

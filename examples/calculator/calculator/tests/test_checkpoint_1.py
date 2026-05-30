@@ -57,13 +57,16 @@ def test_add_operations(entrypoint_argv, test_data_dir):
         timeout=30,
     )
 
-    assert result.returncode == 0, f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    )
 
     actual_results = parse_calculator_output(result.stdout)
     expected_results = expected.get("results", [])
 
-    assert len(actual_results) == len(expected_results), \
+    assert len(actual_results) == len(expected_results), (
         f"Expected {len(expected_results)} results, got {len(actual_results)}"
+    )
 
     for i, (actual, exp) in enumerate(zip(actual_results, expected_results)):
         assert actual == exp, f"Result {i}: expected {exp}, got {actual}"
@@ -72,7 +75,9 @@ def test_add_operations(entrypoint_argv, test_data_dir):
 @pytest.mark.error
 def test_invalid_equation(entrypoint_argv, test_data_dir):
     """Error: Invalid equation syntax should error with status code 1."""
-    case_file = test_data_dir / "checkpoint_1" / "errors" / "invalid_equation.yaml"
+    case_file = (
+        test_data_dir / "checkpoint_1" / "errors" / "invalid_equation.yaml"
+    )
     case = load_error_case(case_file)
 
     result = subprocess.run(
@@ -84,8 +89,9 @@ def test_invalid_equation(entrypoint_argv, test_data_dir):
     )
 
     expected_code = case["expected"]["status_code"]
-    assert result.returncode == expected_code, \
+    assert result.returncode == expected_code, (
         f"Expected exit code {expected_code}, got {result.returncode}"
+    )
 
 
 @pytest.mark.error
@@ -103,5 +109,6 @@ def test_zero_division(entrypoint_argv, test_data_dir):
     )
 
     expected_code = case["expected"]["status_code"]
-    assert result.returncode == expected_code, \
+    assert result.returncode == expected_code, (
         f"Expected exit code {expected_code}, got {result.returncode}"
+    )

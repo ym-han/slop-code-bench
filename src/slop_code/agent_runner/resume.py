@@ -183,7 +183,9 @@ def _check_prompt_mismatch(
     return False
 
 
-def _resolve_last_snapshot_dir(output_path: Path, completed: list[str]) -> Path | None:
+def _resolve_last_snapshot_dir(
+    output_path: Path, completed: list[str]
+) -> Path | None:
     """Return the snapshot directory to restore from when resuming.
 
     Prefers the refactor snapshot over the feature checkpoint snapshot when one
@@ -193,7 +195,9 @@ def _resolve_last_snapshot_dir(output_path: Path, completed: list[str]) -> Path 
     if not completed:
         return None
     last_name = completed[-1]
-    refactor_snapshot = output_path / f"{last_name}{REFACTOR_SUFFIX}" / "snapshot"
+    refactor_snapshot = (
+        output_path / f"{last_name}{REFACTOR_SUFFIX}" / "snapshot"
+    )
     if refactor_snapshot.exists():
         return refactor_snapshot
     return output_path / last_name / "snapshot"
@@ -217,7 +221,9 @@ def _apply_refactor_consistency(
     if not completed:
         return completed, statuses
 
-    current_hash = compute_refactor_identity(refactor_spec) if refactor_spec else None
+    current_hash = (
+        compute_refactor_identity(refactor_spec) if refactor_spec else None
+    )
     completed_set = set(completed)
 
     # Find the first checkpoint whose preceding refactor is inconsistent
@@ -230,7 +236,9 @@ def _apply_refactor_consistency(
         refactor_dir = output_path / f"{name}{REFACTOR_SUFFIX}"
         identity_path = refactor_dir / REFACTOR_IDENTITY_FILENAME
 
-        would_refactor = refactor_runs_after(name, checkpoint_names, refactor_spec)
+        would_refactor = refactor_runs_after(
+            name, checkpoint_names, refactor_spec
+        )
         did_refactor = identity_path.exists()
 
         inconsistent = False
@@ -272,7 +280,11 @@ def _apply_refactor_consistency(
                 if not first_stale_seen
                 else InvalidationReason.DEPENDS_ON_INVALID
             )
-            new_statuses.append(CheckpointStatus(name=status.name, is_valid=False, reason=reason))
+            new_statuses.append(
+                CheckpointStatus(
+                    name=status.name, is_valid=False, reason=reason
+                )
+            )
             first_stale_seen = True
         else:
             new_statuses.append(status)

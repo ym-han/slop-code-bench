@@ -119,6 +119,8 @@ norecursedirs = [
 ]
 markers = [
     "integration: marks tests requiring external services (Docker, network); select with -m integration",
+    "slow: marks tests that run the full local pipeline (select with -m slow)",
+    "hypothesis: marks property-based tests written with Hypothesis",
 ]
 
 [tool.ruff]

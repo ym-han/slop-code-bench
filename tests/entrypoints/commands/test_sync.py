@@ -20,7 +20,7 @@ def test_sync_installs_latest_when_no_version(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         sync.problem_catalog,
         "sync_catalog",
-        lambda target_home, version: (calls.append(version) or manifest),
+        lambda target_home, version: calls.append(version) or manifest,
     )
     monkeypatch.setattr(
         sync.problem_catalog,

@@ -346,8 +346,9 @@ def aggregate_erosion_vs_problem_test_pass_rate(
     return _aggregate_scatter_metrics(
         context,
         x_value_fn=lambda df: df["erosion.mean"].fillna(0).mean(),
-        y_value_fn=lambda df: df["pass_rates.problem.total"].fillna(0).mean()
-        * 100,
+        y_value_fn=lambda df: (
+            df["pass_rates.problem.total"].fillna(0).mean() * 100
+        ),
     )
 
 
@@ -357,8 +358,9 @@ def aggregate_erosion_vs_checkpoint_test_pass_rate(
     return _aggregate_scatter_metrics(
         context,
         x_value_fn=lambda df: df["erosion.mean"].fillna(0).mean(),
-        y_value_fn=lambda df: df["pass_rates.checkpoint.total"].fillna(0).mean()
-        * 100,
+        y_value_fn=lambda df: (
+            df["pass_rates.checkpoint.total"].fillna(0).mean() * 100
+        ),
     )
 
 

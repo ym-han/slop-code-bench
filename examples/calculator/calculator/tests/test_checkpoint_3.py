@@ -57,13 +57,16 @@ def test_advanced_math(entrypoint_argv, test_data_dir):
         timeout=30,
     )
 
-    assert result.returncode == 0, f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    )
 
     actual_results = parse_calculator_output(result.stdout)
     expected_results = expected.get("results", [])
 
-    assert len(actual_results) == len(expected_results), \
+    assert len(actual_results) == len(expected_results), (
         f"Expected {len(expected_results)} results, got {len(actual_results)}"
+    )
 
     for i, (actual, exp) in enumerate(zip(actual_results, expected_results)):
         assert actual == exp, f"Result {i}: expected {exp}, got {actual}"
@@ -83,7 +86,9 @@ def test_simple_function(entrypoint_argv, test_data_dir):
         timeout=30,
     )
 
-    assert result.returncode == 0, f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    )
 
     actual_results = parse_calculator_output(result.stdout)
     expected_results = expected.get("results", [])
@@ -106,7 +111,9 @@ def test_multiple_params_function(entrypoint_argv, test_data_dir):
         timeout=30,
     )
 
-    assert result.returncode == 0, f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    )
 
     actual_results = parse_calculator_output(result.stdout)
     expected_results = expected.get("results", [])
@@ -129,7 +136,9 @@ def test_history_basic(entrypoint_argv, test_data_dir):
         timeout=30,
     )
 
-    assert result.returncode == 0, f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    )
 
     actual_results = parse_calculator_output(result.stdout)
     expected_results = expected.get("results", [])
@@ -152,7 +161,9 @@ def test_history_clear(entrypoint_argv, test_data_dir):
         timeout=30,
     )
 
-    assert result.returncode == 0, f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"Expected exit code 0, got {result.returncode}. stderr: {result.stderr}"
+    )
 
     actual_results = parse_calculator_output(result.stdout)
     expected_results = expected.get("results", [])
@@ -164,7 +175,9 @@ def test_history_clear(entrypoint_argv, test_data_dir):
 @pytest.mark.error
 def test_invalid_function(entrypoint_argv, test_data_dir):
     """Error: Invalid function definition should error with status code 1."""
-    case_file = test_data_dir / "checkpoint_3" / "errors" / "invalid_function.yaml"
+    case_file = (
+        test_data_dir / "checkpoint_3" / "errors" / "invalid_function.yaml"
+    )
     case = load_error_case(case_file)
 
     result = subprocess.run(
@@ -176,14 +189,17 @@ def test_invalid_function(entrypoint_argv, test_data_dir):
     )
 
     expected_code = case["expected"]["status_code"]
-    assert result.returncode == expected_code, \
+    assert result.returncode == expected_code, (
         f"Expected exit code {expected_code}, got {result.returncode}"
+    )
 
 
 @pytest.mark.error
 def test_function_call_error(entrypoint_argv, test_data_dir):
     """Error: Function call error should error with status code 2."""
-    case_file = test_data_dir / "checkpoint_3" / "errors" / "function_call_error.yaml"
+    case_file = (
+        test_data_dir / "checkpoint_3" / "errors" / "function_call_error.yaml"
+    )
     case = load_error_case(case_file)
 
     result = subprocess.run(
@@ -195,5 +211,6 @@ def test_function_call_error(entrypoint_argv, test_data_dir):
     )
 
     expected_code = case["expected"]["status_code"]
-    assert result.returncode == expected_code, \
+    assert result.returncode == expected_code, (
         f"Expected exit code {expected_code}, got {result.returncode}"
+    )

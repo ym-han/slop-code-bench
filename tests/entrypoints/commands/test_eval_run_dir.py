@@ -418,11 +418,9 @@ class TestEvaluateSelectionBehavior:
         monkeypatch.setattr(
             eval_run_dir,
             "display_and_save_summary",
-            lambda _report_file,
-            _agent_run_dir,
-            _config,
-            _console,
-            _expected: None,
+            lambda _report_file, _agent_run_dir, _config, _console, _expected: (
+                None
+            ),
         )
         monkeypatch.setattr(
             eval_run_dir,

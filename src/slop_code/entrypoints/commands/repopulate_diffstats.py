@@ -103,10 +103,14 @@ def repopulate_diffstats(
     if problem_name is not None:
         problems = [p for p in problems if p.name == problem_name]
         if not problems:
-            console.print(f"[red]Problem '{problem_name}' not found in {run_dir}[/red]")
+            console.print(
+                f"[red]Problem '{problem_name}' not found in {run_dir}[/red]"
+            )
             sys.exit(1)
 
-    console.print(f"[green]Found {len(problems)} problem(s) in {run_dir}[/green]")
+    console.print(
+        f"[green]Found {len(problems)} problem(s) in {run_dir}[/green]"
+    )
 
     all_results: dict[str, dict[str, dict]] = {}
     for problem_dir in problems:

@@ -92,7 +92,9 @@ def parse_diffstat_output(output: str) -> DiffstatResult:
         )
 
     per_file = [_parse_file_stat_line(ln) for ln in lines[1:] if ln.strip()]
-    lines_changed = sum(e.insertions + e.deletions + e.modifications for e in per_file)
+    lines_changed = sum(
+        e.insertions + e.deletions + e.modifications for e in per_file
+    )
     return DiffstatResult(
         files_changed=len(per_file),
         lines_changed=lines_changed,
@@ -100,7 +102,9 @@ def parse_diffstat_output(output: str) -> DiffstatResult:
     )
 
 
-def git_diffstat_between_dirs(from_dir: Path | None, to_dir: Path) -> DiffstatResult:
+def git_diffstat_between_dirs(
+    from_dir: Path | None, to_dir: Path
+) -> DiffstatResult:
     """Compute CQB-commensurable diff stats between two snapshot directories.
 
     Uses `git diff --no-index -M --ignore-space-change | diffstat -tm`, matching

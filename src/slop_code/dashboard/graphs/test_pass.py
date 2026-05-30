@@ -78,9 +78,9 @@ def build_test_pass_rate_bars(context: ChartContext) -> go.Figure:
                 # We want the mean of means per run.
                 run_means = run_df.groupby("run_path").apply(
                     lambda g: (
-                        g[passed_col] / g[total_col].replace(0, 1)
-                    ).mean()
-                    * 100
+                        (g[passed_col] / g[total_col].replace(0, 1)).mean()
+                        * 100
+                    )
                 )
                 return run_means.mean(), run_means.std()
 
