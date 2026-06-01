@@ -7,7 +7,6 @@ Mass formula: mass = max(0, metric - baseline) * max(1, size)^alpha
 """
 
 import json
-import sys
 from pathlib import Path
 from typing import Annotated
 

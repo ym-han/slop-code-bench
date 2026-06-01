@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 import re
 import tarfile
-from abc import ABC, abstractmethod
-from collections import Counter
-from dataclasses import dataclass, field
+from abc import ABC
+from abc import abstractmethod
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any
@@ -22,7 +22,9 @@ from typing import Annotated, Any
 import tiktoken
 import typer
 import yaml
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic import computed_field
 from rich.console import Console
 from rich.table import Table
 
@@ -1389,7 +1391,7 @@ def render_comparison_table(runs: dict[str, dict[str, Any]]) -> Table:
     table = Table(title="Run Comparison", expand=True)
 
     table.add_column("Metric", style="cyan", width=25)
-    for run_name in runs.keys():
+    for run_name in runs:
         # Truncate long names
         short_name = run_name[:20] + "..." if len(run_name) > 23 else run_name
         table.add_column(short_name, justify="right", width=18)

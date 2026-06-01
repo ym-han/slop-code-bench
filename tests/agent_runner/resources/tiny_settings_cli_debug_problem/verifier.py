@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 from json import JSONDecodeError
 
+from slop_code.evaluation.adapters import cli
+
 from slop_code.evaluation import CheckpointConfig
 from slop_code.evaluation import verifiers
-from slop_code.evaluation.adapters import cli
 
 
 class Verifier:

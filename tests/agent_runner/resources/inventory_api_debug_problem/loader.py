@@ -5,11 +5,11 @@ from collections.abc import Generator
 from pathlib import Path
 
 import yaml
+from slop_code.evaluation.adapters import APICase
+from slop_code.evaluation.adapters import APIResult
 
 from slop_code.evaluation import CheckpointConfig
 from slop_code.evaluation import GroupConfig
-from slop_code.evaluation.adapters import APICase
-from slop_code.evaluation.adapters import APIResult
 
 
 def _load_case(
